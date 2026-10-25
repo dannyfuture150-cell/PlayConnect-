@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { checkFolderAccess, folderAllowed, uidFromRequest } from "@/lib/uploadAuth";
-import { r2CompleteMultipart, r2Configured, r2PartUrl, r2PublicUrl, r2PutUrl, r2StartMultipart } from "@/lib/r2";
+import { r2CheckCredentials, r2CompleteMultipart, r2Configured, r2PartUrl, r2PublicUrl, r2PutUrl, r2StartMultipart } from "@/lib/r2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +50,9 @@ export async function POST(req: Request) {
       if (!(size > 0) || size > MAX_BYTES[kind]) {
         return NextResponse.json({ ok: false, error: `That ${kind} is too large.` }, { status: 413 });
       }
+
+      const setupProblem = await r2CheckCredentials();
+      if (setupProblem) return NextResponse.json({ ok: false, error: setupProblem }, { status: 503 });
 
       const key = `${folder}/${Date.now()}-${randomBytes(4).toString("hex")}-${safeName(String(body.filename ?? "file"))}`;
       if (body.action === "single") {

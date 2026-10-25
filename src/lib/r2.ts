@@ -161,3 +161,27 @@ export async function r2CompleteMultipart(key: string, uploadId: string, parts: 
   const xml = await r2Request(key, "POST", { uploadId }, body, "application/xml");
   if (/<Error>/.test(xml)) throw new Error("R2 could not finish the upload");
 }
+
+let credsOk = false;
+
+/** Checks once that the keys, account id and bucket really work. Returns a short reason when they don't. */
+export async function r2CheckCredentials(): Promise<string | null> {
+  if (credsOk) return null;
+  const t = { ...target("x"), path: `/${process.env.R2_BUCKET}` };
+  const query = { "list-type": "2", "max-keys": "1" };
+  try {
+    const headers = signHeaders(t, "GET", query, "");
+    const { host: _h, ...sendHeaders } = headers;
+    void _h;
+    const res = await fetch(`https://${t.host}${encodePath(t.path)}?${canonicalQuery(query)}`, { method: "GET", headers: sendHeaders });
+    if (res.ok) {
+      credsOk = true;
+      return null;
+    }
+    const text = await res.text();
+    const code = text.match(/<Code>([^<]+)<\/Code>/)?.[1] ?? "";
+    return `Storage setup problem: ${res.status} ${code}`.trim();
+  } catch (e) {
+    return `Storage setup problem: can't reach R2 (${(e as Error).message?.slice(0, 60) ?? "unknown"})`;
+  }
+}
