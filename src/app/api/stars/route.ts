@@ -704,7 +704,10 @@ export async function POST(req: Request) {
     if (body.action === "redeem" && body.itemId) return NextResponse.json(await redeem(db, uid, body.itemId));
     if (body.action === "equip" && body.slot) return NextResponse.json(await equip(db, uid, body.slot, body.itemId ?? null));
     return NextResponse.json({ ok: false, error: "Unknown action." }, { status: 400 });
-  } catch {
-    return NextResponse.json({ ok: false, error: "Something went wrong. Try again." }, { status: 500 });
+  } catch (err) {
+    const e = err as { code?: unknown; message?: string };
+    console.error("[stars] failed:", e?.code, e?.message);
+    const code = e?.code ? ` (${String(e.code).slice(0, 40)})` : "";
+    return NextResponse.json({ ok: false, error: `Something went wrong${code}. Try again.` }, { status: 500 });
   }
 }

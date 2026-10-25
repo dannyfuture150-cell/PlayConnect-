@@ -178,7 +178,7 @@ async function withRetries<T>(tries: number, run: (attempt: number) => Promise<T
     } catch (e: any) {
       const retryable = e?.retryable === true || e instanceof TypeError;
       if (!retryable || attempt >= tries - 1) {
-        if (retryable) throw new Error("Your connection kept dropping. Try again when the signal is better.");
+        if (retryable) throw new Error(`Your connection kept dropping. Try again when the signal is better.${e?.message ? ` (${String(e.message).slice(0, 80)})` : ""}`);
         throw e;
       }
       await sleep(Math.min(8000, 1000 * 2 ** attempt));
@@ -293,7 +293,7 @@ function putBlob(url: string, blob: Blob, contentType: string, onLoaded?: (loade
       clearTimeout(stall);
       if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.getResponseHeader("ETag"));
       // 403 usually means the link expired or was refused once: ask for a fresh one
-      else fail("Upload failed.", xhr.status >= 500 || xhr.status === 429 || xhr.status === 408 || xhr.status === 403);
+      else fail(`Upload failed (storage said ${xhr.status}).`, xhr.status >= 500 || xhr.status === 429 || xhr.status === 408 || xhr.status === 403);
     };
     xhr.onerror = () => fail("Network error during upload.", true);
     xhr.onabort = () => fail("The connection stalled.", true);
