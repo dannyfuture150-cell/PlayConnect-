@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import { callStars } from "@/hooks/useStars";
+import { STAR_RULES } from "@/lib/starsCatalog";
 import { safeName, uploadImage, validateImageFile, validateVideoFile } from "@/lib/firebase/storage-helpers";
 import type { PostAuthorSnapshot, ShopCategory, ShopItem, ShopOrder } from "@/types";
 
@@ -47,6 +49,13 @@ export function useCreateShopItem() {
       images: File[];
       video?: File | null;
     }) => {
+      // Check the listing fee BEFORE uploading anything, so nobody waits through uploads just to be refused.
+      try {
+        const bal = (await getDoc(doc(db, "stars", input.seller.uid))).data()?.balance ?? 0;
+        if (bal < STAR_RULES.sellFee) throw new Error(`Posting something for sale costs ${STAR_RULES.sellFee} PlayCoins. You have ${bal}.`);
+      } catch (e) {
+        if ((e as Error).message.startsWith("Posting")) throw e;
+      }
       const urls: string[] = [];
       let videoUrl: string | null = null;
       if (input.video) {
@@ -59,22 +68,21 @@ export function useCreateShopItem() {
         if (err) throw new Error(err);
         urls.push(await uploadImage(`shop/${input.seller.uid}/${Date.now()}-${safeName(f.name)}`, f));
       }
-      await addDoc(collection(db, "shopItems"), {
-        sellerId: input.seller.uid,
-        seller: input.seller,
-        title: input.title,
-        description: input.description,
-        price: input.price,
-        currency: "GH₵",
-        starsPrice: input.starsPrice ?? null,
-        reservedBy: null,
-        category: input.category,
-        location: input.location,
-        imageUrls: urls,
-        ...(videoUrl ? { videoUrl } : {}),
-        sold: false,
-        createdAt: serverTimestamp(),
+      // The listing is created on the server, which also takes the listing fee in PlayCoins.
+      const r = await callStars({
+        action: "shopCreate",
+        data: {
+          title: input.title,
+          description: input.description,
+          price: input.price,
+          starsPrice: input.starsPrice ?? null,
+          category: input.category,
+          location: input.location,
+          imageUrls: urls,
+          ...(videoUrl ? { videoUrl } : {}),
+        },
       });
+      if (!r.ok) throw new Error(r.error || "Couldn't post. Try again.");
     },
   });
 }

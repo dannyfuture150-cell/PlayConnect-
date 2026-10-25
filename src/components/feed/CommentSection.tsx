@@ -14,7 +14,9 @@ import { useAuth } from "@/providers/AuthProvider";
 import type { Comment } from "@/types";
 import Link from "next/link";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
+import { MentionInput } from "@/components/shared/MentionInput";
+import { Linkify } from "@/components/shared/Linkify";
+import { notifyMentions } from "@/lib/mentions";
 import { Button } from "@/components/ui/button";
 
 interface ReplyTarget {
@@ -87,7 +89,7 @@ function CommentItem({
         </div>
         <p className="text-sm text-steel/80">
           {comment.replyTo && <span className="mr-1 font-medium text-violet-glow">@{comment.replyTo.displayName}</span>}
-          {comment.text}
+          <Linkify text={comment.text} className="break-all font-medium underline" mentionClassName="font-semibold text-violet-glow" />
         </p>
         {onReply && (
           <button
@@ -109,7 +111,7 @@ export function CommentSection({ postId, postAuthorId }: { postId: string; postA
   const [text, setText] = useState("");
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const topLevel = comments.filter((c) => !c.parentId);
   const repliesByParent = new Map<string, Comment[]>();
@@ -139,8 +141,17 @@ export function CommentSection({ postId, postAuthorId }: { postId: string; postA
       },
       ...(replyTarget ?? {}),
     });
+    const sent = text.trim();
     setText("");
     setReplyTarget(null);
+    if (sent.includes("@")) {
+      notifyMentions({
+        text: sent,
+        from: { uid: profile.uid, username: profile.username, displayName: profile.displayName, photoURL: profile.photoURL },
+        postId,
+        skipUids: [postAuthorId, ...(replyTarget ? [replyTarget.replyTo.uid] : [])],
+      });
+    }
     } catch {
       // keep the text so the user can retry
     }
@@ -212,18 +223,20 @@ export function CommentSection({ postId, postAuthorId }: { postId: string; postA
               </button>
             </div>
           )}
-          <div className="flex items-center gap-2">
-            <Avatar className="h-7 w-7">
+          <div className="flex items-end gap-2">
+            <Avatar className="mb-1 h-7 w-7">
               <AvatarImage src={profile.photoURL ?? undefined} alt={profile.displayName} />
               <AvatarFallback className="text-[11px]">{profile.displayName[0]?.toUpperCase()}</AvatarFallback>
             </Avatar>
-            <Input
+            <MentionInput
               ref={inputRef}
               value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
+              onValueChange={setText}
+              onSubmit={submit}
               placeholder={replyTarget ? `Reply to ${replyTarget.replyTo.displayName}…` : "Add a comment…"}
-              className="h-9"
+              minHeight={36}
+              maxLength={1000}
+              className="rounded-2xl py-2 text-sm"
             />
             <Button size="sm" onClick={submit} disabled={!text.trim() || addComment.isPending}>
               {replyTarget ? "Reply" : "Send"}

@@ -31,7 +31,7 @@ export default function PrivacyPage() {
       <p className="mt-2">Profiles, posts, followers and group member lists are visible to other signed-in users. Direct messages are visible only to the people in the conversation. Your email is never shown publicly.</p>
 
       <H>Services we use</H>
-      <p className="mt-2">Google Firebase (sign-in, database, notifications), Cloudinary (photo and video storage), and Vercel (hosting). They process data on our behalf under their own privacy terms.</p>
+      <p className="mt-2">Google Firebase (sign-in, database, notifications), Cloudflare and Cloudinary (photo and video storage), and Vercel (hosting). They process data on our behalf under their own privacy terms.</p>
 
       <H>Deleting your data</H>
       <p className="mt-2">You can permanently delete your account any time in <strong>Settings → Account → Delete account</strong>. This removes your profile, posts, stories, follows and group memberships. Some copies may remain briefly in backups. You can also email us to request deletion.</p>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { addDoc, collection, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, limit, onSnapshot, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { createNotification } from "@/hooks/useNotifications";
 import { useReportBracketResult } from "@/hooks/useBracket";
@@ -12,16 +12,27 @@ import type { MatchResult, PostAuthorSnapshot, TournamentMatch } from "@/types";
 /** Live list of submitted results for a tournament (newest first). */
 export function useTournamentResults(tournamentId: string) {
   const [results, setResults] = useState<MatchResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!tournamentId) return;
-    const q = query(collection(db, "tournaments", tournamentId, "results"), orderBy("createdAt", "desc"), limit(200));
+    // No server-side ordering: a result that was just sent has no timestamp yet and could be left out of an ordered query.
+    const q = query(collection(db, "tournaments", tournamentId, "results"), limit(300));
     return onSnapshot(
       q,
-      (snap) => setResults(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MatchResult))),
-      () => setResults([])
+      (snap) => {
+        setError(null);
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MatchResult));
+        const ms = (r: MatchResult) => (r.createdAt as { toMillis?: () => number } | null)?.toMillis?.() ?? Date.now();
+        list.sort((a, b) => ms(b) - ms(a));
+        setResults(list);
+      },
+      (e) => {
+        setResults([]);
+        setError(e?.message?.includes("permission") ? "Can't load submitted results — publish the latest Firestore rules." : "Couldn't load submitted results. Pull to refresh.");
+      }
     );
   }, [tournamentId]);
-  return results;
+  return { results, error };
 }
 
 /** A player sends in their score + screenshot for their match. */

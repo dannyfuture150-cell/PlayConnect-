@@ -16,6 +16,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { callStars } from "@/hooks/useStars";
 import { db } from "@/lib/firebase/client";
@@ -30,6 +31,20 @@ export function useTournaments(options?: { poll?: boolean }) {
       // Newest 100 only (so the list doesn't get slower as the app grows),
       // then put them back in soonest-first order for display.
       const snap = await getDocs(query(collection(db, "tournaments"), orderBy("startsAt", "desc"), limit(100)));
+      return snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Tournament))
+        .sort((a, b) => (a.startsAt?.toMillis?.() ?? 0) - (b.startsAt?.toMillis?.() ?? 0));
+    },
+  });
+}
+
+/** Every tournament one organiser has created (no ordering in the query, so it needs no special index). */
+export function useOrganizerTournaments(organizerId: string | undefined) {
+  return useQuery<Tournament[]>({
+    queryKey: ["tournaments", "by", organizerId],
+    enabled: !!organizerId,
+    queryFn: async () => {
+      const snap = await getDocs(query(collection(db, "tournaments"), where("organizerId", "==", organizerId), limit(200)));
       return snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as Tournament))
         .sort((a, b) => (a.startsAt?.toMillis?.() ?? 0) - (b.startsAt?.toMillis?.() ?? 0));
@@ -65,25 +80,23 @@ export function useCreateTournament() {
       starsFee?: number | null;
       prize: string | null;
     }) => {
-      const ref = doc(collection(db, "tournaments"));
-      await setDoc(ref, {
-        title: input.title,
-        game: input.game,
-        description: input.description,
-        organizerId: input.organizerId,
-        format: input.format,
-        maxParticipants: input.maxParticipants,
-        entryType: input.entryType,
-        entryFee: input.entryType === "paid" ? input.entryFee : input.entryType === "stars" && input.starsFee ? `${input.starsFee} PlayCoins` : null,
-        starsFee: input.entryType === "stars" ? input.starsFee ?? null : null,
-        prize: input.prize,
-        participantIds: [],
-        pendingParticipantIds: [],
-        status: "upcoming",
-        startsAt: input.startsAt,
-        createdAt: serverTimestamp(),
+      // Created on the server, which also takes the creation fee in PlayCoins.
+      const r = await callStars({
+        action: "createTournament",
+        data: {
+          title: input.title,
+          game: input.game,
+          description: input.description,
+          format: input.format,
+          maxParticipants: input.maxParticipants,
+          entryType: input.entryType,
+          entryFee: input.entryFee,
+          starsFee: input.starsFee ?? null,
+          prize: input.prize,
+          startsAt: input.startsAt.getTime(),
+        },
       });
-      await updateDoc(doc(db, "users", input.organizerId), { tournamentsOrganized: increment(1) });
+      if (!r.ok) throw new Error(r.error || "Couldn't create that tournament. Please try again.");
     },
     onSuccess: () =>
       queryClient.invalidateQueries({
@@ -114,6 +127,14 @@ export function useToggleJoinTournament() {
           pendingParticipantIds: input.currentlyPending ? arrayRemove(input.uid) : arrayUnion(input.uid),
         });
         return;
+      }
+      // Once the bracket exists nobody joins or leaves any more.
+      const [tSnap, startedSnap] = await Promise.all([
+        getDoc(doc(db, "tournaments", input.tournamentId)),
+        getDocs(query(collection(db, "tournaments", input.tournamentId, "matches"), limit(1))),
+      ]);
+      if (tSnap.data()?.bracketStarted === true || !startedSnap.empty) {
+        throw new Error(input.currentlyJoined ? "The bracket has started, so you can't leave this tournament now." : "The bracket has started, so no new players can join.");
       }
       // Only the join itself is essential, so it is its own write (it works with every version of the rules).
       await updateDoc(doc(db, "tournaments", input.tournamentId), {
@@ -203,6 +224,12 @@ export function useDeleteTournament() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (tournamentId: string) => {
+      // PlayCoins tournaments: give everyone their entry fee back first (the server only does this before the bracket starts).
+      const snap = await getDoc(doc(db, "tournaments", tournamentId));
+      if (snap.exists() && snap.data().entryType === "stars") {
+        const r = await callStars({ action: "cancelTournament", tournamentId });
+        if (!r.ok) throw new Error(r.error || "Couldn't refund the players, so the tournament wasn't deleted. Try again.");
+      }
       await deleteDoc(doc(db, "tournaments", tournamentId));
     },
     onSuccess: () =>

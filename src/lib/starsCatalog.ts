@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-export type StarSlot = "frame" | "cardstyle" | "title" | "namecolor" | "banner";
+export type StarSlot = "frame" | "cardstyle" | "title" | "namecolor" | "banner" | "unlock";
 export const STAR_SLOTS: StarSlot[] = ["frame", "cardstyle", "title", "namecolor", "banner"];
 export const SLOT_LABEL: Record<StarSlot, string> = {
   frame: "Profile frames",
@@ -8,6 +8,7 @@ export const SLOT_LABEL: Record<StarSlot, string> = {
   title: "Titles",
   namecolor: "Name colours",
   banner: "Profile banners",
+  unlock: "Extras",
 };
 
 export interface StarItem {
@@ -69,6 +70,13 @@ export const STAR_RULES = {
   referrer: 10, // when a referred player joins their first tournament
   referee: 5, // welcome bonus for the player who was referred
   maxReferrals: 20,
+  createTournamentFee: 5, // organisers pay this each time they create a tournament
+  sellFee: 5, // sellers pay this each time they post something in the shop
+  sendMinPosts: 3, // to send PlayCoins you need this many posts...
+  sendMinTournaments: 1, // ...and to have joined this many tournaments (as a player)
+  sendMax: 100, // most you can send in one go
+  sendDailyLimit: 150, // most you can send in a day
+  tournamentFeePercent: 0, // taken from the organiser's payout when entry fees are released (0 = organiser keeps it all)
   shopFeePercent: 10, // taken from the seller's payout when a PlayCoins sale completes
   streakBigBonus: 25, // every 30th day in a row
   shieldPrice: 15, // Streak Shield: saves your streak if you miss one day
@@ -77,7 +85,55 @@ export const STAR_RULES = {
   shopAutoReleaseDays: 3, // after the seller marks delivered, stars are released automatically
 };
 
-export const itemById = (id: string) => STAR_ITEMS.find((i) => i.id === id);
+/** One-time unlocks. Owning one gives you its feature (it isn't "equipped"). */
+export const UNLOCKS: StarItem[] = [
+  { id: "unlock_chat", name: "Chat Customiser", slot: "unlock", price: 200, desc: "Choose your own chat bubble colour and chat wallpaper." },
+  { id: "unlock_profilebg", name: "Profile Background", slot: "unlock", price: 200, desc: "Put a colour or your own photo behind your profile." },
+];
+
+export const itemById = (id: string) => STAR_ITEMS.find((i) => i.id === id) ?? UNLOCKS.find((i) => i.id === id);
+
+/** Chat bubble colours (used for the messages you send). */
+export const CHAT_BUBBLES: Record<string, { name: string; bg: string }> = {
+  violet: { name: "Violet", bg: "linear-gradient(135deg,#7c3aed,#a855f7)" },
+  ocean: { name: "Ocean", bg: "linear-gradient(135deg,#0ea5e9,#2563eb)" },
+  mint: { name: "Mint", bg: "linear-gradient(135deg,#10b981,#059669)" },
+  sunset: { name: "Sunset", bg: "linear-gradient(135deg,#f97316,#ec4899)" },
+  fire: { name: "Fire", bg: "linear-gradient(135deg,#ef4444,#f97316)" },
+  rose: { name: "Rose", bg: "linear-gradient(135deg,#ec4899,#be185d)" },
+  gold: { name: "Gold", bg: "linear-gradient(135deg,#d97706,#f59e0b)" },
+  night: { name: "Night", bg: "linear-gradient(135deg,#1e293b,#475569)" },
+};
+
+/** Chat wallpapers (what you see behind the messages, only on your screen). */
+export const CHAT_WALLPAPERS: Record<string, { name: string; style: CSSProperties }> = {
+  night: { name: "Night sky", style: { background: "linear-gradient(180deg,#020617,#1e1b4b)" } },
+  pitch: { name: "Pitch", style: { background: "repeating-linear-gradient(90deg,#14532d 0 36px,#166534 36px 72px)" } },
+  sunset: { name: "Sunset", style: { background: "linear-gradient(160deg,#7c2d12,#be185d,#4c1d95)" } },
+  ocean: { name: "Ocean", style: { background: "linear-gradient(180deg,#0c4a6e,#0e7490)" } },
+  forest: { name: "Forest", style: { background: "linear-gradient(180deg,#052e16,#14532d)" } },
+  grape: { name: "Grape", style: { background: "linear-gradient(160deg,#2e1065,#6d28d9)" } },
+  dots: { name: "Dots", style: { backgroundColor: "#0f172a", backgroundImage: "radial-gradient(#334155 1.5px, transparent 1.5px)", backgroundSize: "20px 20px" } },
+  mono: { name: "Plain dark", style: { background: "#0b0f1a" } },
+};
+
+export interface ChatStyle { bubble?: string | null; wallpaper?: string | null }
+export const bubbleStyle = (id: string | null | undefined): CSSProperties | undefined =>
+  id && CHAT_BUBBLES[id] ? { backgroundImage: CHAT_BUBBLES[id].bg, color: "#fff" } : undefined;
+export const wallpaperStyle = (id: string | null | undefined): CSSProperties | undefined => (id ? CHAT_WALLPAPERS[id]?.style : undefined);
+
+/** Profile backgrounds: ready-made ones, or a player's own photo. */
+export const PROFILE_BGS: Record<string, { name: string; style: CSSProperties }> = {
+  aurora: { name: "Aurora", style: { background: "linear-gradient(135deg,#064e3b,#34d399 40%,#6d28d9 75%,#0f172a)" } },
+  sunset: { name: "Sunset", style: { background: "linear-gradient(135deg,#f97316,#ec4899,#8b5cf6)" } },
+  ocean: { name: "Ocean", style: { background: "linear-gradient(160deg,#0c4a6e,#0891b2,#0f172a)" } },
+  pitch: { name: "Pitch", style: { background: "repeating-linear-gradient(90deg,#15803d 0 44px,#16a34a 44px 88px)" } },
+  ember: { name: "Ember", style: { background: "linear-gradient(160deg,#450a0a,#b91c1c,#f97316)" } },
+  midnight: { name: "Midnight", style: { background: "linear-gradient(180deg,#020617,#1e3a8a)" } },
+  royal: { name: "Royal", style: { background: "linear-gradient(135deg,#312e81,#7c3aed,#fbbf24)" } },
+  mono: { name: "Graphite", style: { background: "linear-gradient(135deg,#0f172a,#334155)" } },
+};
+export interface ProfileBg { type: "preset" | "image"; value: string }
 
 
 const ANIM = "pcShimmer 4s linear infinite";

@@ -118,6 +118,7 @@ export function useCreatePost() {
         postsCount: increment(1),
       });
       if (mediaType === "video") pushAlert({ kind: "post", postId: postRef.id });
+      return postRef.id;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["feed"] }),
   });

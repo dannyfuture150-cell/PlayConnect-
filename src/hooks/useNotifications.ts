@@ -29,6 +29,7 @@ interface CreateNotificationInput {
   communityId?: string;
   tournamentId?: string;
   leagueId?: string;
+  link?: string;
 }
 
 /** Fire-and-forget notification creation. Never notifies yourself. */
@@ -43,6 +44,7 @@ export async function createNotification(input: CreateNotificationInput) {
       communityId: input.communityId ?? null,
       tournamentId: input.tournamentId ?? null,
       leagueId: input.leagueId ?? null,
+      link: input.link ?? null,
       read: false,
       createdAt: serverTimestamp(),
     });

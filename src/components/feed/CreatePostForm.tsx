@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ImagePlus, Plus, Send, Video, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -11,7 +11,8 @@ import { createPostSchema, type CreatePostInput } from "@/lib/validations/profil
 import { validateImageFile, validateVideoFile } from "@/lib/firebase/storage-helpers";
 import { useCreatePost } from "@/hooks/usePosts";
 import { useAuth } from "@/providers/AuthProvider";
-import { Textarea } from "@/components/ui/textarea";
+import { MentionInput } from "@/components/shared/MentionInput";
+import { notifyMentions } from "@/lib/mentions";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
@@ -40,11 +41,11 @@ export function CreatePostForm() {
   const [remoteImage, setRemoteImage] = useState<string | null>(null); // screenshot attached from "Post your win"
 
   const {
-    register,
     handleSubmit,
     reset,
     watch,
     setValue,
+    control,
     formState: { errors },
   } = useForm<CreatePostInput>({ resolver: zodResolver(createPostSchema), defaultValues: { text: "" } });
 
@@ -56,7 +57,8 @@ export function CreatePostForm() {
       const params = new URLSearchParams(window.location.search);
       const prefill = params.get("draft");
       const img = params.get("img");
-      if (img && /^https:\/\/res\.cloudinary\.com\//.test(img)) setRemoteImage(img);
+      const r2Base = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "").replace(/\/+$/, "");
+      if (img && (/^https:\/\/res\.cloudinary\.com\//.test(img) || (r2Base && img.startsWith(r2Base + "/")))) setRemoteImage(img);
       if (img || prefill) setOpen(true);
       setGame(params.get("game") || "");
       const draft = prefill || localStorage.getItem(DRAFT_KEY) || "";
@@ -172,7 +174,7 @@ export function CreatePostForm() {
     setMediaError(null);
     setProgress(0);
     try {
-      await createPost.mutateAsync({
+      const newPostId = await createPost.mutateAsync({
         text: data.text,
         gameTag: game || undefined,
         onProgress: setProgress,
@@ -187,6 +189,13 @@ export function CreatePostForm() {
         },
       });
       try { localStorage.removeItem(DRAFT_KEY); } catch {}
+      if (data.text.includes("@") && newPostId) {
+        notifyMentions({
+          text: data.text,
+          from: { uid: profile.uid, username: profile.username, displayName: profile.displayName, photoURL: profile.photoURL },
+          postId: newPostId,
+        });
+      }
       reset();
       clearImages();
       clearVideo();
@@ -240,10 +249,20 @@ export function CreatePostForm() {
         </Avatar>
 
         <div className="flex-1">
-          <Textarea
-            placeholder="Write a caption…"
-            className="min-h-[60px] border-transparent bg-transparent px-0 py-1.5 focus-visible:ring-0"
-            {...register("text")}
+          <Controller
+            name="text"
+            control={control}
+            render={({ field }) => (
+              <MentionInput
+                value={field.value ?? ""}
+                onValueChange={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="Write a caption… use @ to tag a player"
+                minHeight={60}
+                maxHeight={220}
+                className="bg-transparent px-0 py-1.5"
+              />
+            )}
           />
           {errors.text && <p className="text-xs text-signal-red">{errors.text.message}</p>}
 

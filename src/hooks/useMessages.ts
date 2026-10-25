@@ -110,6 +110,7 @@ export function useSendMessage(threadId: string) {
       senderId: string;
       media?: { file: File; type: "image" | "video" | "audio"; duration?: number };
       replyTo?: { id: string; name: string; text: string } | null;
+      sticker?: string;
     }) => {
       let mediaUrl: string | null = null;
       let mediaType: "image" | "video" | "audio" | null = null;
@@ -129,12 +130,13 @@ export function useSendMessage(threadId: string) {
         mediaUrl,
         mediaType,
         mediaDuration: input.media?.type === "audio" ? input.media.duration ?? null : null,
+        sticker: input.sticker ?? null,
         replyTo: input.replyTo ?? null,
         read: false,
         createdAt: serverTimestamp(),
       });
       await updateDoc(doc(db, "threads", threadId), {
-        lastMessage: input.text || (mediaType === "audio" ? "🎤 Voice note" : mediaType === "video" ? "📹 Video" : mediaType === "image" ? "📷 Photo" : ""),
+        lastMessage: input.text || (input.sticker ? "🎟️ Sticker" : mediaType === "audio" ? "🎤 Voice note" : mediaType === "video" ? "📹 Video" : mediaType === "image" ? "📷 Photo" : ""),
         lastMessageAt: serverTimestamp(),
         lastSenderId: input.senderId,
         messageCount: increment(1),

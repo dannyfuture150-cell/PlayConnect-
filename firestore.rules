@@ -152,8 +152,8 @@ service cloud.firestore {
     // ---------- shop ----------
     match /shopItems/{itemId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid &&
-        request.resource.data.get('reservedBy', null) == null;
+      // created by the server only (it takes the PlayCoins listing fee)
+      allow create: if false;
       // 'reservedBy' (someone paid with PlayStars) can only be changed by the server
       allow update: if isSignedIn() &&
         (isAdmin() ||
@@ -183,7 +183,7 @@ service cloud.firestore {
          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'memberCount'])) ||
          // a member sending a chat message bumps the "new message" marker
          (request.auth.uid in resource.data.memberIds &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastChatAt', 'lastChatBy'])));
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastChatAt', 'lastChatBy', 'lastChatText', 'lastChatName'])));
       allow delete: if isSignedIn() && (request.auth.uid in resource.data.moderatorIds || isAdmin());
 
       // Group chat: anyone signed in can read; only members can send, and
@@ -288,12 +288,16 @@ service cloud.firestore {
     // ---------- tournaments ----------
     match /tournaments/{tournamentId} {
       allow read: if true;
-      allow create: if isSignedIn() && isOrganizer() && request.resource.data.organizerId == request.auth.uid;
+      // created by the server only (it takes the PlayCoins creation fee)
+      allow create: if false;
       allow update: if isSignedIn() &&
         (resource.data.organizerId == request.auth.uid || isAdmin() ||
          // free/paid tournaments: players add or remove themselves. Stars tournaments are joined through the server only.
          (resource.data.get('entryType', 'free') != 'stars' &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantIds', 'waitlistIds'])) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantIds', 'waitlistIds']) &&
+          // once the bracket has started nobody can take themselves out
+          (request.resource.data.get('participantIds', []).size() >= resource.data.get('participantIds', []).size() ||
+           !resource.data.get('bracketStarted', false))) ||
          // wanting in when it is full
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlistIds']) ||
          // the winner confirming they received the prize

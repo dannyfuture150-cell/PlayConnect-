@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { initAdmin } from "@/lib/firebaseAdmin";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, type Firestore } from "firebase-admin/firestore";
-import { itemById, MISSIONS, STAR_RULES, STAR_SLOTS, type MissionProgress, type StarSlot } from "@/lib/starsCatalog";
+import { CHAT_BUBBLES, CHAT_WALLPAPERS, itemById, MISSIONS, PROFILE_BGS, STAR_RULES, STAR_SLOTS, type MissionProgress, type StarSlot } from "@/lib/starsCatalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -169,6 +169,7 @@ async function releaseOrder(db: Firestore, orderId: string) {
   return db.runTransaction(async (tx) => {
     const o = (await tx.get(oRef)).data();
     if (!o || (o.status !== "held" && o.status !== "delivered")) return false;
+    const itemSnap = await tx.get(db.doc(`shopItems/${o.itemId}`));
     const fee = Math.floor((o.price * STAR_RULES.shopFeePercent) / 100);
     const payout = o.price - fee;
     tx.set(db.doc(`stars/${o.sellerId}`), { balance: FieldValue.increment(payout), lifetime: FieldValue.increment(payout) }, { merge: true });
@@ -178,7 +179,8 @@ async function releaseOrder(db: Firestore, orderId: string) {
       createdAt: FieldValue.serverTimestamp(),
     });
     tx.update(oRef, { status: "released" });
-    tx.update(db.doc(`shopItems/${o.itemId}`), { sold: true, reservedBy: null });
+    // the listing may have been removed meanwhile (e.g. by an admin) — the money must still move
+    if (itemSnap.exists) tx.update(itemSnap.ref, { sold: true, reservedBy: null });
     return true;
   });
 }
@@ -188,6 +190,7 @@ async function cancelOrder(db: Firestore, orderId: string, uid: string) {
   return db.runTransaction(async (tx) => {
     const o = (await tx.get(oRef)).data();
     if (!o) return { ok: false, error: "Order not found." };
+    const itemSnap = await tx.get(db.doc(`shopItems/${o.itemId}`));
     const isSeller = o.sellerId === uid;
     const isBuyer = o.buyerId === uid;
     if (!isSeller && !isBuyer) return { ok: false, error: "That's not your order." };
@@ -199,7 +202,7 @@ async function cancelOrder(db: Firestore, orderId: string, uid: string) {
       createdAt: FieldValue.serverTimestamp(),
     });
     tx.update(oRef, { status: "cancelled" });
-    tx.update(db.doc(`shopItems/${o.itemId}`), { reservedBy: null });
+    if (itemSnap.exists) tx.update(itemSnap.ref, { reservedBy: null });
     return { ok: true };
   });
 }
@@ -328,6 +331,8 @@ async function joinTournament(db: Firestore, uid: string, tournamentId: string) 
     if ((s.data()?.balance ?? 0) < fee) return { ok: false, error: `You need ${fee} PlayCoins to join.` };
     tx.update(tRef, { participantIds: FieldValue.arrayUnion(uid), waitlistIds: FieldValue.arrayRemove(uid) });
     tx.set(sRef, { balance: FieldValue.increment(-fee) }, { merge: true });
+    // The fee is held for the organiser (server-only record) and paid out when the bracket starts.
+    tx.set(db.doc(`tournamentPots/${tournamentId}`), { organizerId: td.organizerId, pot: FieldValue.increment(fee), payers: FieldValue.arrayUnion(uid) }, { merge: true });
     // remember exactly what was paid, so a refund can never be bigger (or smaller) if the organiser later changes the price
     tx.set(sRef.collection("paid").doc(tournamentId), { amount: fee, at: FieldValue.serverTimestamp() });
     tx.set(db.doc(`stars/${uid}/log/entry_${tournamentId}_${Date.now()}`), {
@@ -345,9 +350,11 @@ async function leaveTournament(db: Firestore, uid: string, tournamentId: string)
   const sRef = db.doc(`stars/${uid}`);
   return db.runTransaction(async (tx) => {
     const paidRef = sRef.collection("paid").doc(tournamentId);
-    const [t, started, paid] = await Promise.all([tx.get(tRef), tx.get(tRef.collection("matches").limit(1)), tx.get(paidRef)]);
+    const potRef = db.doc(`tournamentPots/${tournamentId}`);
+    const [t, started, paid, potSnap] = await Promise.all([tx.get(tRef), tx.get(tRef.collection("matches").limit(1)), tx.get(paidRef), tx.get(potRef)]);
     const td = t.data();
-    if (!td || td.entryType !== "stars") return { ok: false, error: "This tournament doesn't use PlayCoins." };
+    // judged by what this player actually paid, so an organiser changing the entry type later can't trap their fee
+    if (!td || (td.entryType !== "stars" && !paid.exists)) return { ok: false, error: "This tournament doesn't use PlayCoins." };
     if (!((td.participantIds ?? []) as string[]).includes(uid)) return { ok: false, error: "You haven't joined." };
     if (!started.empty || td.status !== "upcoming") return { ok: false, error: "It's too late to leave and get your PlayCoins back." };
     // refund what this player actually paid (older joins without a record fall back to the current price)
@@ -355,6 +362,8 @@ async function leaveTournament(db: Firestore, uid: string, tournamentId: string)
     tx.update(tRef, { participantIds: FieldValue.arrayRemove(uid) });
     if (paid.exists) tx.delete(paidRef);
     if (fee >= 1) {
+      // take it back out of the held pot (older joins from before pots existed have nothing to take from)
+      if (Number(potSnap.data()?.pot ?? 0) >= fee) tx.update(potRef, { pot: FieldValue.increment(-fee), payers: FieldValue.arrayRemove(uid) });
       tx.set(sRef, { balance: FieldValue.increment(fee) }, { merge: true });
       tx.set(db.doc(`stars/${uid}/log/refund_${tournamentId}_${Date.now()}`), {
         amount: fee,
@@ -366,6 +375,270 @@ async function leaveTournament(db: Firestore, uid: string, tournamentId: string)
   });
 }
 
+/* ---------- paid actions: creating a tournament, selling, and the 200 🪙 unlocks ---------- */
+
+/** Only photos/videos that were uploaded through the app's own storage. */
+function okMediaUrl(u: unknown): u is string {
+  if (typeof u !== "string" || u.length > 600 || !u.startsWith("https://")) return false;
+  const r2 = (process.env.R2_PUBLIC_URL ?? "").replace(/\/+$/, "");
+  return u.startsWith("https://res.cloudinary.com/") || u.startsWith("https://firebasestorage.googleapis.com/") || (!!r2 && u.startsWith(r2 + "/"));
+}
+const str = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
+
+async function createTournament(db: Firestore, uid: string, d: Record<string, unknown>) {
+  const u = (await db.doc(`users/${uid}`).get()).data();
+  if (u?.accountType !== "organizer") return { ok: false, error: "Only organiser accounts can create tournaments." };
+  const title = str(d.title, 100);
+  const game = str(d.game, 60);
+  const format = String(d.format ?? "");
+  const entryType = String(d.entryType ?? "free");
+  const max = Math.floor(Number(d.maxParticipants));
+  const startsMs = Number(d.startsAt);
+  if (!title || !game) return { ok: false, error: "Add a title and a game." };
+  if (!["single_elimination", "double_elimination", "round_robin"].includes(format)) return { ok: false, error: "Pick a format." };
+  if (!["free", "paid", "stars"].includes(entryType)) return { ok: false, error: "Bad entry type." };
+  if (!(max >= 2 && max <= 512)) return { ok: false, error: "Players must be between 2 and 512." };
+  if (!Number.isFinite(startsMs) || startsMs <= 0) return { ok: false, error: "Pick a start time." };
+  const starsFee = entryType === "stars" ? Math.min(10000, Math.max(1, Math.round(Number(d.starsFee)))) : null;
+  if (entryType === "stars" && !(starsFee && starsFee >= 1)) return { ok: false, error: "Set the PlayCoins entry price." };
+  const entryFeeText = entryType === "paid" ? str(d.entryFee, 60) : null;
+  if (entryType === "paid" && !entryFeeText) return { ok: false, error: "Set the entry fee." };
+  const fee = STAR_RULES.createTournamentFee;
+  const sRef = db.doc(`stars/${uid}`);
+  const ref = db.collection("tournaments").doc();
+  return db.runTransaction(async (tx) => {
+    const s = (await tx.get(sRef)).data() ?? {};
+    if ((s.balance ?? 0) < fee) return { ok: false, error: `Creating a tournament costs ${fee} PlayCoins. You have ${s.balance ?? 0}.` };
+    tx.set(sRef, { balance: FieldValue.increment(-fee) }, { merge: true });
+    tx.set(db.doc(`stars/${uid}/log/create_${ref.id}`), { amount: -fee, reason: `Created tournament: ${title}`, createdAt: FieldValue.serverTimestamp() });
+    tx.set(ref, {
+      title,
+      game,
+      description: str(d.description, 2000),
+      organizerId: uid,
+      format,
+      maxParticipants: max,
+      entryType,
+      entryFee: entryType === "paid" ? entryFeeText : entryType === "stars" ? `${starsFee} PlayCoins` : null,
+      starsFee,
+      prize: str(d.prize, 200) || null,
+      participantIds: [],
+      pendingParticipantIds: [],
+      status: "upcoming",
+      startsAt: new Date(startsMs),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(db.doc(`users/${uid}`), { tournamentsOrganized: FieldValue.increment(1) });
+    return { ok: true, id: ref.id };
+  });
+}
+
+async function shopCreate(db: Firestore, uid: string, d: Record<string, unknown>) {
+  const u = (await db.doc(`users/${uid}`).get()).data();
+  if (!u) return { ok: false, error: "Couldn't find your profile." };
+  const title = str(d.title, 80);
+  const price = Number(d.price);
+  const images = Array.isArray(d.imageUrls) ? (d.imageUrls as unknown[]) : [];
+  const category = String(d.category ?? "other");
+  if (title.length < 3) return { ok: false, error: "Add a title." };
+  if (!Number.isFinite(price) || price <= 0 || price > 10_000_000) return { ok: false, error: "Enter a price." };
+  if (images.length < 1 || images.length > 10 || !images.every(okMediaUrl)) return { ok: false, error: "Add at least one photo." };
+  if (d.videoUrl && !okMediaUrl(d.videoUrl)) return { ok: false, error: "That video link isn't allowed." };
+  if (!["accounts", "coins", "consoles", "controllers", "accessories", "other"].includes(category)) return { ok: false, error: "Pick a category." };
+  const sp = Math.round(Number(d.starsPrice));
+  const starsPrice = Number.isFinite(sp) && sp >= 1 ? Math.min(100000, sp) : null;
+  const fee = STAR_RULES.sellFee;
+  const sRef = db.doc(`stars/${uid}`);
+  const ref = db.collection("shopItems").doc();
+  return db.runTransaction(async (tx) => {
+    const s = (await tx.get(sRef)).data() ?? {};
+    if ((s.balance ?? 0) < fee) return { ok: false, error: `Posting something for sale costs ${fee} PlayCoins. You have ${s.balance ?? 0}.` };
+    tx.set(sRef, { balance: FieldValue.increment(-fee) }, { merge: true });
+    tx.set(db.doc(`stars/${uid}/log/sell_${ref.id}`), { amount: -fee, reason: `Listed for sale: ${title}`, createdAt: FieldValue.serverTimestamp() });
+    tx.set(ref, {
+      sellerId: uid,
+      seller: { uid, username: u.username ?? "", displayName: u.displayName ?? "", photoURL: u.photoURL ?? null },
+      title,
+      description: str(d.description, 1000),
+      price,
+      currency: "GH₵",
+      starsPrice,
+      reservedBy: null,
+      category,
+      location: str(d.location, 60),
+      imageUrls: images,
+      ...(d.videoUrl ? { videoUrl: d.videoUrl } : {}),
+      sold: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return { ok: true, id: ref.id };
+  });
+}
+
+async function owns(db: Firestore, uid: string, itemId: string) {
+  return (((await db.doc(`stars/${uid}`).get()).data()?.owned ?? []) as string[]).includes(itemId);
+}
+
+async function setChatStyle(db: Firestore, uid: string, bubble: unknown, wallpaper: unknown) {
+  if (!(await owns(db, uid, "unlock_chat"))) return { ok: false, error: "Unlock the Chat Customiser first." };
+  const b = bubble == null || bubble === "" ? null : String(bubble);
+  const w = wallpaper == null || wallpaper === "" ? null : String(wallpaper);
+  if ((b && !CHAT_BUBBLES[b]) || (w && !CHAT_WALLPAPERS[w])) return { ok: false, error: "That style doesn't exist." };
+  await db.doc(`stars/${uid}`).set({ chat: { bubble: b, wallpaper: w } }, { merge: true });
+  return { ok: true };
+}
+
+async function setProfileBg(db: Firestore, uid: string, type: unknown, value: unknown) {
+  if (!(await owns(db, uid, "unlock_profilebg"))) return { ok: false, error: "Unlock the Profile Background first." };
+  const ref = db.doc(`stars/${uid}`);
+  if (type === "none") {
+    await ref.set({ profileBg: FieldValue.delete() }, { merge: true });
+    return { ok: true };
+  }
+  if (type === "preset" && typeof value === "string" && PROFILE_BGS[value]) {
+    await ref.set({ profileBg: { type: "preset", value } }, { merge: true });
+    return { ok: true };
+  }
+  if (type === "image" && okMediaUrl(value) && value.includes(`/${uid}/`)) {
+    await ref.set({ profileBg: { type: "image", value } }, { merge: true });
+    return { ok: true };
+  }
+  return { ok: false, error: "That background isn't allowed." };
+}
+
+/* ---------- sending PlayCoins to another player ---------- */
+
+async function sendEligibility(db: Firestore, uid: string) {
+  const [ts, ps, st] = await Promise.all([
+    db.collection("tournaments").where("participantIds", "array-contains", uid).limit(30).get(),
+    db.collection("posts").where("authorId", "==", uid).limit(STAR_RULES.sendMinPosts).get(),
+    db.doc(`stars/${uid}`).get(),
+  ]);
+  // joined as a player, not just running one
+  const joined = ts.docs.filter((d) => d.data().organizerId !== uid).length;
+  const sd = st.data() ?? {};
+  const sentToday = sd.sentDay === today() ? Number(sd.sentToday ?? 0) : 0;
+  return {
+    joined,
+    posts: ps.size,
+    sentToday,
+    eligible: joined >= STAR_RULES.sendMinTournaments && ps.size >= STAR_RULES.sendMinPosts,
+  };
+}
+
+async function sendCoins(db: Firestore, uid: string, toRaw: string, amountRaw: number) {
+  const amount = Math.floor(Number(amountRaw));
+  if (!(amount >= 1)) return { ok: false, error: "Enter how many PlayCoins to send." };
+  if (amount > STAR_RULES.sendMax) return { ok: false, error: `You can send up to ${STAR_RULES.sendMax} 🪙 at a time.` };
+  const el = await sendEligibility(db, uid);
+  if (el.joined < STAR_RULES.sendMinTournaments) return { ok: false, error: "Join a tournament first to unlock sending PlayCoins." };
+  if (el.posts < STAR_RULES.sendMinPosts) return { ok: false, error: `Post at least ${STAR_RULES.sendMinPosts} times to unlock sending PlayCoins (you have ${el.posts}).` };
+  const name = String(toRaw ?? "").trim().replace(/^@/, "").toLowerCase();
+  if (!name) return { ok: false, error: "Enter the player's username." };
+  const found = await db.collection("users").where("username", "==", name).limit(1).get();
+  const to = found.docs[0];
+  if (!to || to.data().onboardingComplete !== true) return { ok: false, error: "Couldn't find a player with that username." };
+  if (to.id === uid) return { ok: false, error: "You can't send PlayCoins to yourself." };
+  // The receiver has to qualify the same way the sender does.
+  const rel = await sendEligibility(db, to.id);
+  if (!rel.eligible) {
+    return { ok: false, error: `@${to.data().username} can't receive PlayCoins yet. They need to join a tournament and make at least ${STAR_RULES.sendMinPosts} posts first.` };
+  }
+  const me = (await db.doc(`users/${uid}`).get()).data() ?? {};
+  const sRef = db.doc(`stars/${uid}`);
+  const r = await db.runTransaction(async (tx) => {
+    const s = (await tx.get(sRef)).data() ?? {};
+    const sentToday = s.sentDay === today() ? Number(s.sentToday ?? 0) : 0;
+    if ((s.balance ?? 0) < amount) return { ok: false, error: `You only have ${s.balance ?? 0} PlayCoins.` };
+    if (sentToday + amount > STAR_RULES.sendDailyLimit) {
+      const left = Math.max(0, STAR_RULES.sendDailyLimit - sentToday);
+      return { ok: false, error: `Daily sending limit reached. You can send ${left} more 🪙 today.` };
+    }
+    const stamp = Date.now();
+    tx.set(sRef, { balance: FieldValue.increment(-amount), sentDay: today(), sentToday: sentToday + amount }, { merge: true });
+    // received coins add to the balance but not to "lifetime earned", so they can't be recycled into rank
+    tx.set(db.doc(`stars/${to.id}`), { balance: FieldValue.increment(amount) }, { merge: true });
+    tx.set(db.doc(`stars/${uid}/log/sent_${stamp}`), {
+      amount: -amount,
+      reason: `Sent to @${to.data().username}`,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.set(db.doc(`stars/${to.id}/log/recv_${uid}_${stamp}`), {
+      amount,
+      reason: `Received from @${me.username ?? "a player"}`,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.set(db.collection(`notifications/${to.id}/items`).doc(), {
+      type: "coins",
+      amount,
+      fromUid: uid,
+      fromUser: { uid, username: me.username ?? "", displayName: me.displayName ?? "A player", photoURL: me.photoURL ?? null },
+      link: "/stars",
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return { ok: true, sent: amount, to: to.data().username as string };
+  });
+  return r;
+}
+
+/**
+ * Pays an organiser the entry fees held for their PlayCoins tournaments once the
+ * bracket has started (so nobody can be refunded after the organiser has been paid).
+ */
+async function releaseTournamentFees(db: Firestore, uid: string) {
+  const pots = await db.collection("tournamentPots").where("organizerId", "==", uid).limit(100).get();
+  for (const p of pots.docs) {
+    if (Number(p.data().pot ?? 0) < 1) continue;
+    const tRef = db.doc(`tournaments/${p.id}`);
+    await db.runTransaction(async (tx) => {
+      const [pot, t, started] = await Promise.all([tx.get(p.ref), tx.get(tRef), tx.get(tRef.collection("matches").limit(1))]);
+      const amount = Math.floor(Number(pot.data()?.pot ?? 0));
+      const td = t.data();
+      if (amount < 1 || !td || td.organizerId !== uid || started.empty) return;
+      const cut = Math.floor((amount * STAR_RULES.tournamentFeePercent) / 100);
+      const pay = amount - cut;
+      tx.update(p.ref, { pot: 0, paidOut: FieldValue.increment(amount) });
+      tx.set(db.doc(`stars/${uid}`), { balance: FieldValue.increment(pay), lifetime: FieldValue.increment(pay) }, { merge: true });
+      tx.set(db.doc(`stars/${uid}/log/tpayout_${p.id}_${Date.now()}`), {
+        amount: pay,
+        reason: `Entry fees: ${td.title ?? "your tournament"}${cut ? ` (after ${cut} fee)` : ""}`,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    });
+  }
+}
+
+/** Before a tournament is deleted: give every player their entry fee back (only possible before the bracket starts). */
+async function refundTournament(db: Firestore, uid: string, tournamentId: string) {
+  const tRef = db.doc(`tournaments/${tournamentId}`);
+  const t = (await tRef.get()).data();
+  if (!t) return { ok: true };
+  const me = (await db.doc(`users/${uid}`).get()).data();
+  if (t.organizerId !== uid && me?.isAdmin !== true) return { ok: false, error: "Only the organiser can do that." };
+  const potRef = db.doc(`tournamentPots/${tournamentId}`);
+  // everyone who paid (even if the organiser later removed them from the player list or changed the entry type)
+  const payers = new Set<string>([...(((await potRef.get()).data()?.payers ?? []) as string[]), ...(((t.participantIds ?? []) as string[]))]);
+  for (const pid of Array.from(payers)) {
+    await db.runTransaction(async (tx) => {
+      const paidRef = db.doc(`stars/${pid}/paid/${tournamentId}`);
+      const [paid, pot, started] = await Promise.all([tx.get(paidRef), tx.get(potRef), tx.get(tRef.collection("matches").limit(1))]);
+      if (!paid.exists || !started.empty) return; // already refunded, or the organiser has already been paid
+      const fee = Number(paid.data()?.amount ?? 0);
+      tx.delete(paidRef);
+      if (fee < 1) return;
+      if (Number(pot.data()?.pot ?? 0) >= fee) tx.update(potRef, { pot: FieldValue.increment(-fee) });
+      tx.set(db.doc(`stars/${pid}`), { balance: FieldValue.increment(fee) }, { merge: true });
+      tx.set(db.doc(`stars/${pid}/log/refund_${tournamentId}_${Date.now()}`), {
+        amount: fee,
+        reason: `Refund: ${t.title ?? "tournament"} was cancelled`,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    });
+  }
+  return { ok: true };
+}
+
 export async function POST(req: Request) {
   if (!initAdmin()) return NextResponse.json({ ok: false, error: "PlayCoins aren't set up on the server yet." }, { status: 503 });
   const header = req.headers.get("authorization") ?? "";
@@ -375,7 +648,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ ok: false, error: "Please sign in again." }, { status: 401 });
   }
-  let body: { action?: string; itemId?: string | null; slot?: string; tournamentId?: string; orderId?: string };
+  let body: { action?: string; itemId?: string | null; slot?: string; tournamentId?: string; orderId?: string; to?: string; amount?: number; data?: Record<string, unknown>; bubble?: string | null; wallpaper?: string | null; bgType?: string; bgValue?: string };
   try {
     body = await req.json();
   } catch {
@@ -389,12 +662,22 @@ export async function POST(req: Request) {
       await syncReferrals(db, uid);
       await payMissions(db, uid).catch(() => undefined);
       await autoRelease(db, uid);
+      await releaseTournamentFees(db, uid).catch(() => undefined);
       return NextResponse.json({ ok: true });
     }
     if (body.action === "missions") {
       const { items } = await payMissions(db, uid);
       return NextResponse.json({ ok: true, missions: items, weekEnds: weekStartMs() + 7 * 86400000 });
     }
+    if (body.action === "sendInfo") {
+      const el = await sendEligibility(db, uid);
+      return NextResponse.json({ ok: true, ...el, minPosts: STAR_RULES.sendMinPosts, minTournaments: STAR_RULES.sendMinTournaments, dailyLimit: STAR_RULES.sendDailyLimit, maxEach: STAR_RULES.sendMax });
+    }
+    if (body.action === "createTournament") return NextResponse.json(await createTournament(db, uid, body.data ?? {}));
+    if (body.action === "shopCreate") return NextResponse.json(await shopCreate(db, uid, body.data ?? {}));
+    if (body.action === "setChatStyle") return NextResponse.json(await setChatStyle(db, uid, body.bubble, body.wallpaper));
+    if (body.action === "setProfileBg") return NextResponse.json(await setProfileBg(db, uid, body.bgType, body.bgValue));
+    if (body.action === "send") return NextResponse.json(await sendCoins(db, uid, String(body.to ?? ""), Number(body.amount)));
     if (body.action === "buyShield") return NextResponse.json(await buyShield(db, uid));
     if (body.action === "joinTournament" && body.tournamentId) {
       const r = await joinTournament(db, uid, body.tournamentId);
@@ -402,6 +685,7 @@ export async function POST(req: Request) {
       return NextResponse.json(r);
     }
     if (body.action === "leaveTournament" && body.tournamentId) return NextResponse.json(await leaveTournament(db, uid, body.tournamentId));
+    if (body.action === "cancelTournament" && body.tournamentId) return NextResponse.json(await refundTournament(db, uid, body.tournamentId));
     if (body.action === "shopBuy" && body.itemId) return NextResponse.json(await shopBuy(db, uid, body.itemId));
     if (body.action === "shopCancel" && body.orderId) return NextResponse.json(await cancelOrder(db, body.orderId, uid));
     if (body.action === "shopDeliver" && body.orderId) {

@@ -12,6 +12,8 @@ export interface StarsDoc {
   loginStreak: number;
   owned: string[];
   shields?: number;
+  chat?: { bubble?: string | null; wallpaper?: string | null };
+  profileBg?: { type: "preset" | "image"; value: string } | null;
   equipped: { frame?: string | null; cardstyle?: string | null; title?: string | null; namecolor?: string | null; banner?: string | null };
 }
 
@@ -56,10 +58,14 @@ export function useStarLog(uid: string | undefined) {
 /** Calls the server (the only place stars can change). */
 export async function callStars(
   body:
-    | { action: "sync" | "missions" | "buyShield" }
+    | { action: "sync" | "missions" | "buyShield" | "sendInfo" }
+    | { action: "send"; to: string; amount: number }
+    | { action: "createTournament" | "shopCreate"; data: Record<string, unknown> }
+    | { action: "setChatStyle"; bubble: string | null; wallpaper: string | null }
+    | { action: "setProfileBg"; bgType: "preset" | "image" | "none"; bgValue?: string }
     | { action: "redeem"; itemId: string }
     | { action: "equip"; slot: string; itemId: string | null }
-    | { action: "joinTournament" | "leaveTournament"; tournamentId: string }
+    | { action: "joinTournament" | "leaveTournament" | "cancelTournament"; tournamentId: string }
     | { action: "shopBuy"; itemId: string }
     | { action: "shopDeliver" | "shopConfirm" | "shopCancel"; orderId: string }
 ) {
@@ -75,7 +81,7 @@ export async function callStars(
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
-    return (await res.json().catch(() => ({ ok: false, error: "The server didn't answer properly. Try again in a moment." }))) as { ok: boolean; error?: string; missions?: MissionProgress[]; weekEnds?: number };
+    return (await res.json().catch(() => ({ ok: false, error: "The server didn't answer properly. Try again in a moment." }))) as { ok: boolean; error?: string; missions?: MissionProgress[]; weekEnds?: number; eligible?: boolean; joined?: number; posts?: number; sentToday?: number; minPosts?: number; minTournaments?: number; dailyLimit?: number; maxEach?: number; sent?: number; to?: string; id?: string };
   } catch {
     return { ok: false, error: "Couldn't reach the server. Check your connection and try again." } as const;
   } finally {

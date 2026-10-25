@@ -161,7 +161,10 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
             {onWaitlist ? "On the list ✓" : "Notify me"}
           </Button>
         )}
-        {!isOrganizer && profile && !(isFull && !isJoined && !isPending) && (
+        {!isOrganizer && profile && tournament.bracketStarted && isJoined && (
+          <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-steel/70">In · bracket started</span>
+        )}
+        {!isOrganizer && profile && !tournament.bracketStarted && !(isFull && !isJoined && !isPending) && (
           <Button
             size="sm"
             variant={isJoined || isPending ? "outline" : "default"}
@@ -179,7 +182,7 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
             {joinLabel()}
           </Button>
         )}
-        {toggleJoin.isError && <p className="w-full text-xs text-signal-red">Couldn&apos;t update your spot. Check your connection and try again.</p>}
+        {toggleJoin.isError && <p className="w-full text-xs text-signal-red">{(toggleJoin.error as Error)?.message?.startsWith("The bracket") ? (toggleJoin.error as Error).message : "Couldn't update your spot. Check your connection and try again."}</p>}
       </div>
     </Card>
   );

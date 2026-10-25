@@ -383,13 +383,20 @@ export function BracketView({
   viewerUid: string | undefined;
 }) {
   const router = useRouter();
-  const results = useTournamentResults(tournamentId);
+  const { results, error: resultsError } = useTournamentResults(tournamentId);
   const [celebrating, setCelebrating] = useState<PostAuthorSnapshot | null>(null);
   const [openMatchId, setOpenMatchId] = useState<string | null>(null);
   const rounds = Array.from(new Set(matches.map((m) => m.round))).sort((a, b) => a - b);
   const { profile: viewerProfile } = useAuth();
   const canReport = viewerUid === organizerId;
   const canReverse = canReport || viewerProfile?.isAdmin === true;
+
+  // Tapping a "result sent" notification lands here and scrolls to the results waiting for you.
+  useEffect(() => {
+    if (!canReport || typeof window === "undefined" || window.location.hash !== "#results") return;
+    const t = setTimeout(() => document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
+    return () => clearTimeout(t);
+  }, [canReport, results.length]);
   const totalRounds = rounds.length;
 
   function roundLabel(round: number) {
@@ -424,7 +431,10 @@ export function BracketView({
       )}
 
       {canReport && (
-        <PendingResults results={results} matches={matches} tournamentId={tournamentId} game={game} organizerId={organizerId} />
+        <div id="results" className="flex flex-col gap-2">
+          {resultsError && <p className="rounded-xl bg-signal-red/10 p-3 text-xs text-signal-red">{resultsError}</p>}
+          <PendingResults results={results} matches={matches} tournamentId={tournamentId} game={game} organizerId={organizerId} />
+        </div>
       )}
 
       <BracketBoard

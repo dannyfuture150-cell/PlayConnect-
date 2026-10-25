@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCreateTournament } from "@/hooks/useTournaments";
+import { STAR_RULES } from "@/lib/starsCatalog";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,8 +69,8 @@ export function CreateTournamentDialog({
         setPrize("");
       }
       setStartsAt("");
-    } catch {
-      setSubmitError("Couldn't create that tournament. Please try again.");
+    } catch (e) {
+      setSubmitError((e as Error)?.message || "Couldn't create that tournament. Please try again.");
     }
   }
 
@@ -209,6 +210,7 @@ export function CreateTournamentDialog({
             <Label htmlFor="t-desc">Description</Label>
             <Textarea id="t-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Rules, anything players should know" />
           </div>
+          <p className="text-xs text-steel/60">Creating a tournament costs {STAR_RULES.createTournamentFee} 🪙 PlayCoins.</p>
           {submitError && <p className="text-sm text-signal-red">{submitError}</p>}
           <Button
             onClick={handleCreate}
@@ -221,7 +223,7 @@ export function CreateTournamentDialog({
               createTournament.isPending
             }
           >
-            {createTournament.isPending ? "Creating…" : "Create tournament"}
+            {createTournament.isPending ? "Creating…" : `Create tournament · ${STAR_RULES.createTournamentFee} 🪙`}
           </Button>
         </div>
       </DialogContent>

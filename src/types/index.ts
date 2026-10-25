@@ -153,7 +153,7 @@ export interface Story {
 /** notifications/{uid}/items/{notificationId} */
 export interface AppNotification {
   id: string;
-  type: "like" | "comment" | "follow" | "message" | "tournament_invite" | "community_invite" | "trophy_win" | "result_submitted" | "result_approved" | "result_rejected" | "match_ready" | "spot_open" | "tournament_reminder" | "advanced" | "result_reversed" | "challenge";
+  type: "like" | "comment" | "follow" | "message" | "tournament_invite" | "community_invite" | "trophy_win" | "result_submitted" | "result_approved" | "result_rejected" | "match_ready" | "spot_open" | "tournament_reminder" | "advanced" | "result_reversed" | "challenge" | "mention" | "coins";
   fromUid: string;
   fromUser: PostAuthorSnapshot;
   postId?: string;
@@ -161,6 +161,8 @@ export interface AppNotification {
   tournamentId?: string;
   roundLabel?: string;
   leagueId?: string;
+  link?: string | null;
+  amount?: number;
   tournamentTitle?: string;
   prize?: string | null;
   game?: string;
@@ -186,6 +188,8 @@ export interface Community {
   announcementCount?: number; // total announcements posted — drives members' unread badges
   lastChatAt?: Timestamp; // when the newest group-chat message was sent
   lastChatBy?: string; // who sent it
+  lastChatText?: string; // preview of the newest group-chat message
+  lastChatName?: string; // first name of whoever sent it
   chatMode?: "everyone" | "admins"; // who may send chat messages (default: admins)
   createdBy: string;
   createdAt: Timestamp;
@@ -211,6 +215,7 @@ export interface GroupMessage {
   mediaUrl?: string | null;
   mediaType?: "image" | "video" | "audio" | null;
   mediaDuration?: number | null; // seconds, for voice notes
+  sticker?: string | null; // id from lib/stickers
   replyTo?: { id: string; name: string; text: string } | null;
   createdAt: Timestamp;
 }
@@ -239,6 +244,7 @@ export interface DirectMessage {
   mediaUrl: string | null;
   mediaType: "image" | "video" | "audio" | null;
   mediaDuration?: number | null; // seconds, for voice notes
+  sticker?: string | null; // id from lib/stickers
   replyTo?: { id: string; name: string; text: string } | null;
   read: boolean;
   createdAt: Timestamp;
@@ -256,6 +262,7 @@ export interface Tournament {
   maxParticipants: number;
   entryType: "free" | "paid" | "stars";
   starsFee?: number | null; // entry price in PlayCoins (entryType "stars")
+  bracketStarted?: boolean; // set when the bracket is generated; players can no longer leave
   entryFee: string | null; // free-text (e.g. "$5", "500 coins") — no real payment processing, just a label
   prize: string | null; // free-text (e.g. "$100 cash", "Winner takes all")
   participantIds: string[];

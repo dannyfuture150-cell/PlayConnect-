@@ -18,6 +18,12 @@ import { Linkify } from "@/components/shared/Linkify";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { safeName, uploadFile, validateImageFile } from "@/lib/firebase/storage-helpers";
 import { Card } from "@/components/ui/card";
+import { MentionInput } from "@/components/shared/MentionInput";
+import { StickerPicker, StickerView } from "@/components/chat/StickerPicker";
+import { useDraft } from "@/hooks/useDraft";
+import { useStars } from "@/hooks/useStars";
+import { bubbleStyle, wallpaperStyle } from "@/lib/starsCatalog";
+import { notifyMentions } from "@/lib/mentions";
 import { VoiceNoteControl } from "@/components/chat/VoiceNoteControl";
 import { VoicePlayer } from "@/components/chat/VoicePlayer";
 import { cn } from "@/lib/utils";
@@ -25,7 +31,7 @@ import { cn } from "@/lib/utils";
 export function GroupChat({ community }: { community: Community }) {
   const { profile } = useAuth();
   const [messages, setMessages] = useState<GroupMessage[]>([]);
-  const [text, setText] = useState("");
+  const [text, setText] = useDraft(`group-${community.id}`);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
@@ -35,6 +41,7 @@ export function GroupChat({ community }: { community: Community }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ url: string; type: "image" | "video" } | null>(null);
 
+  const myStars = useStars(profile?.uid);
   const isMember = !!profile && community.memberIds?.includes(profile.uid);
   const isAdmin = !!profile && community.moderatorIds?.includes(profile.uid);
   const canSend = isMember && ((community.chatMode ?? "admins") === "everyone" || isAdmin);
@@ -90,8 +97,37 @@ export function GroupChat({ community }: { community: Community }) {
       replyTo,
       createdAt: serverTimestamp(),
     });
-    updateDoc(doc(db, "communities", community.id), { lastChatAt: serverTimestamp(), lastChatBy: profile.uid }).catch(() => undefined);
+    bumpChat("🎤 Voice note");
     setReplyTo(null);
+  }
+
+  /** Marks the group as having a new message and keeps its preview line in the Messages list up to date. */
+  function bumpChat(preview: string) {
+    if (!profile) return;
+    updateDoc(doc(db, "communities", community.id), { lastChatAt: serverTimestamp(), lastChatBy: profile.uid }).catch(() => undefined);
+    // Separate write so it never blocks the marker above (needs the latest Firestore rules).
+    updateDoc(doc(db, "communities", community.id), { lastChatText: preview.slice(0, 80), lastChatName: (profile.displayName || "").split(" ")[0] }).catch(() => undefined);
+  }
+
+  async function sendSticker(id: string) {
+    if (!profile || sending) return;
+    setError(null);
+    try {
+      await addDoc(collection(db, "communities", community.id, "chat"), {
+        authorId: profile.uid,
+        author: { uid: profile.uid, username: profile.username, displayName: profile.displayName, photoURL: profile.photoURL ?? null },
+        text: "",
+        sticker: id,
+        mediaUrl: null,
+        mediaType: null,
+        replyTo,
+        createdAt: serverTimestamp(),
+      });
+      bumpChat("🎟️ Sticker");
+      setReplyTo(null);
+    } catch (e: any) {
+      setError(e?.message?.includes("permission") ? "Couldn't send — publish the latest Firestore rules." : e?.message || "Couldn't send. Try again.");
+    }
   }
 
   async function send() {
@@ -114,9 +150,17 @@ export function GroupChat({ community }: { community: Community }) {
         createdAt: serverTimestamp(),
       });
       // Tell other members there is something new in this chat.
-      updateDoc(doc(db, "communities", community.id), { lastChatAt: serverTimestamp(), lastChatBy: profile.uid }).catch(() => undefined);
+      bumpChat(t || (attachment ? "📷 Photo" : ""));
       setText("");
       setReplyTo(null);
+      if (t.includes("@")) {
+        notifyMentions({
+          text: t,
+          from: { uid: profile.uid, username: profile.username, displayName: profile.displayName, photoURL: profile.photoURL },
+          link: `/communities/${community.slug}`,
+          onlyUids: community.memberIds,
+        });
+      }
       if (attachment) URL.revokeObjectURL(attachment.preview);
       setAttachment(null);
     } catch (e: any) {
@@ -137,7 +181,7 @@ export function GroupChat({ community }: { community: Community }) {
       </div>
       <div
         className="flex h-[calc(100dvh-10rem-env(safe-area-inset-top))] min-h-[14rem] flex-col md:h-[60vh] gap-1 overflow-y-auto bg-muted/50 px-3 py-3"
-        style={{ backgroundImage: "radial-gradient(hsl(var(--violet) / 0.10) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
+        style={wallpaperStyle(myStars.chat?.wallpaper) ?? { backgroundImage: "radial-gradient(hsl(var(--violet) / 0.10) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
       >
         {messages.length === 0 && <p className="py-6 text-center text-sm text-steel/50">No messages yet.</p>}
         {messages.map((m) => {
@@ -155,7 +199,7 @@ export function GroupChat({ community }: { community: Community }) {
                 {activeId === m.id && (
                   <button
                     type="button"
-                    onClick={() => { setReplyTo({ id: m.id, name: mine ? "You" : m.author?.displayName ?? "", text: m.text || (m.mediaType === "audio" ? "🎤 Voice note" : "📷 Photo") }); setActiveId(null); }}
+                    onClick={() => { setReplyTo({ id: m.id, name: mine ? "You" : m.author?.displayName ?? "", text: m.text || (m.sticker ? "🎟️ Sticker" : m.mediaType === "audio" ? "🎤 Voice note" : "📷 Photo") }); setActiveId(null); }}
                     className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1.5 text-[11px] font-medium text-steel/70"
                   >
                     <CornerUpLeft className="h-3.5 w-3.5" /> Reply
@@ -173,6 +217,7 @@ export function GroupChat({ community }: { community: Community }) {
                 )}
                 <div
                   onClick={() => { if (window.getSelection()?.toString()) return; setActiveId(activeId === m.id ? null : m.id); }}
+                  style={m.sticker ? { background: "transparent", boxShadow: "none" } : mine ? bubbleStyle(myStars.chat?.bubble) : undefined}
                   className={cn("max-w-[80%] cursor-pointer select-text rounded-2xl px-3 py-2 shadow-sm", mine ? "rounded-tr-sm bg-brand-gradient text-white" : "rounded-tl-sm bg-card text-foreground")}
                 >
                   {m.replyTo && (
@@ -181,6 +226,7 @@ export function GroupChat({ community }: { community: Community }) {
                       <p className="line-clamp-2 opacity-80">{m.replyTo.text}</p>
                     </div>
                   )}
+                  {m.sticker && <StickerView id={m.sticker} />}
                   {m.mediaUrl && m.mediaType === "audio" && (
                     <VoicePlayer url={m.mediaUrl} duration={m.mediaDuration} mine={mine} />
                   )}
@@ -230,16 +276,19 @@ export function GroupChat({ community }: { community: Community }) {
               <button type="button" onClick={() => { URL.revokeObjectURL(attachment.preview); setAttachment(null); }} className="absolute -right-1.5 -top-1.5 rounded-full bg-slate-950/70 p-1 text-white"><X className="h-3 w-3" /></button>
             </div>
           )}
-        <div className="relative flex items-center gap-2">
+        <div className="relative flex items-end gap-2">
           <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={pick} />
           <button type="button" onClick={() => imageRef.current?.click()} className="shrink-0 rounded-lg p-2 text-steel/50 hover:bg-muted" title="Send a photo"><ImagePlus className="h-4 w-4" /></button>
+          <StickerPicker disabled={sending} onPick={sendSticker} />
           <VoiceNoteControl disabled={sending} onError={setError} onSend={sendVoice} />
-          <input
+          <MentionInput
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
+            onValueChange={setText}
+            onSubmit={send}
             placeholder="Message"
-            className="h-11 flex-1 rounded-full bg-muted px-4 text-sm text-foreground outline-none"
+            maxLength={1000}
+            allowedUids={community.memberIds}
+            className="rounded-3xl"
           />
           <button type="button" onClick={send} disabled={(!text.trim() && !attachment) || sending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white disabled:opacity-40">
             <Send className="h-4 w-4" />

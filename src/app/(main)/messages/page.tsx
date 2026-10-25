@@ -168,7 +168,9 @@ export default function MessagesPage() {
                   </div>
                   <div className="mt-0.5 flex items-center justify-between gap-2">
                     <p className={`truncate text-sm ${total > 0 ? "font-medium text-foreground" : "text-steel/50"}`}>
-                      {c.lastAnnouncement || `${c.game} group`}
+                      {c.lastChatText
+                        ? `${c.lastChatName ? `${c.lastChatName}: ` : ""}${c.lastChatText}`
+                        : c.lastAnnouncement || `${c.game} group`}
                     </p>
                     {total > 0 && (
                       <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-bold text-white">

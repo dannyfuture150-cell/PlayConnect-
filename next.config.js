@@ -1,4 +1,10 @@
 /** @type {import('next').NextConfig} */
+// Photos and videos now live on Cloudflare R2; allow its public address for next/image.
+let r2Host = null;
+try {
+  if (process.env.R2_PUBLIC_URL) r2Host = new URL(process.env.R2_PUBLIC_URL).hostname;
+} catch {}
+
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -27,6 +33,8 @@ const nextConfig = {
       { protocol: "https", hostname: "firebasestorage.googleapis.com" },
       { protocol: "https", hostname: "res.cloudinary.com" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      { protocol: "https", hostname: "**.r2.dev" },
+      ...(r2Host ? [{ protocol: "https", hostname: r2Host }] : []),
     ],
     // Needed so next/image can render the local preset-avatar SVGs in
     // public/avatars/ — disabled by default as a general precaution against

@@ -6,7 +6,7 @@ import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 let currentlyPlaying: HTMLVideoElement | null = null;
 
 /**
- * <video> that copes with Cloudinary still converting a fresh upload: the
+ * <video> that copes with a freshly uploaded video that is not ready yet: the
  * first requests can fail for a few seconds (longer for big clips), so on an
  * error it quietly retries a few times instead of leaving a broken player.
  */

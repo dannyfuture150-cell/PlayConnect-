@@ -38,9 +38,9 @@ async function prepareImage(file: File): Promise<File> {
   if (!type.startsWith("image/") || type === "image/gif" || type === "image/svg+xml") return file;
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
-    const MAX_DIM = 2560;
+    const MAX_DIM = 1600; // photos are stored as sent (no resizing on delivery), so keep them phone-sized
     const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
-    if (scale === 1 && file.size < 3 * 1024 * 1024) {
+    if (scale === 1 && file.size < 1.5 * 1024 * 1024) {
       bitmap.close?.();
       return file;
     }
@@ -51,7 +51,7 @@ async function prepareImage(file: File): Promise<File> {
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close?.();
-    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.86));
+    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.82));
     if (!blob || blob.size >= file.size) return file;
     return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
   } catch {
@@ -241,14 +241,166 @@ async function uploadInChunks(
   return result.secure_url as string;
 }
 
+
+// ---------------------------------------------------------------------------
+// Cloudflare R2 uploads (the main path). The server hands out short-lived
+// upload links; the phone sends the file straight to R2. Small files go up in
+// one request, big ones in pieces that are retried on their own.
+// ---------------------------------------------------------------------------
+const R2_PART_SIZE = 8 * 1024 * 1024; // R2 wants equal pieces of at least 5MB, except the last
+let r2Available: boolean | null = null; // null = not checked yet; false = server not set up for R2 (use Cloudinary)
+
+async function r2Call(user: { getIdToken: () => Promise<string> }, payload: Record<string, unknown>): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetch("/api/r2-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new UploadError("Network error — check your connection and try again.", true);
+  }
+  const data = await res.json().catch(() => null);
+  if (data?.notConfigured) return { notConfigured: true };
+  if (!res.ok || !data?.ok) {
+    throw new UploadError(data?.error || `Couldn't start the upload (server ${res.status}).`, res.status >= 500 && res.status !== 503);
+  }
+  return data;
+}
+
+/** PUTs one blob to an R2 link. Fails fast if no bytes move for STALL_MS. Resolves with the piece's ETag. */
+function putBlob(url: string, blob: Blob, contentType: string, onLoaded?: (loaded: number) => void): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    if (contentType) xhr.setRequestHeader("Content-Type", contentType);
+    let stall: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      clearTimeout(stall);
+      stall = setTimeout(() => xhr.abort(), STALL_MS);
+    };
+    const fail = (message: string, retryable: boolean) => {
+      clearTimeout(stall);
+      reject(new UploadError(message, retryable));
+    };
+    xhr.upload.onprogress = (e) => {
+      arm();
+      if (e.lengthComputable) onLoaded?.(e.loaded);
+    };
+    xhr.upload.onload = arm;
+    xhr.onload = () => {
+      clearTimeout(stall);
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.getResponseHeader("ETag"));
+      // 403 usually means the link expired or was refused once: ask for a fresh one
+      else fail("Upload failed.", xhr.status >= 500 || xhr.status === 429 || xhr.status === 408 || xhr.status === 403);
+    };
+    xhr.onerror = () => fail("Network error during upload.", true);
+    xhr.onabort = () => fail("The connection stalled.", true);
+    arm();
+    xhr.send(blob);
+  });
+}
+
+/** Uploads to R2. Returns null when the server isn't set up for R2 (the caller then falls back to Cloudinary). */
+async function uploadViaR2(
+  user: { getIdToken: () => Promise<string> },
+  folder: string,
+  file: File,
+  contentType: string,
+  onProgress?: (pct: number) => void
+): Promise<string | null> {
+  if (r2Available === false) return null;
+  const base = { folder, filename: safeName(file.name || "upload"), contentType, size: file.size };
+
+  if (file.size <= CHUNK_THRESHOLD) {
+    const url = await withRetries(5, async () => {
+      const s = await r2Call(user, { action: "single", ...base });
+      if (s.notConfigured) return null;
+      await putBlob(s.uploadUrl, file, contentType, (loaded) => onProgress?.(Math.min(99, Math.round((loaded / file.size) * 100))));
+      return s.publicUrl as string;
+    });
+    r2Available = url !== null;
+    if (url) onProgress?.(100);
+    return url;
+  }
+
+  const started = await withRetries(4, () => r2Call(user, { action: "start", ...base }));
+  if (started.notConfigured) {
+    r2Available = false;
+    return null;
+  }
+  r2Available = true;
+  const { key, uploadId } = started as { key: string; uploadId: string };
+  const total = file.size;
+  const parts: { PartNumber: number; ETag: string }[] = [];
+  let start = 0;
+  let n = 1;
+  while (start < total) {
+    const end = Math.min(start + R2_PART_SIZE, total);
+    const piece = file.slice(start, end);
+    const partNumber = n;
+    const from = start;
+    const etag = await withRetries(6, async () => {
+      const p = await r2Call(user, { action: "part", key, uploadId, partNumber });
+      const tag = await putBlob(p.uploadUrl, piece, contentType, (loaded) => onProgress?.(Math.min(99, Math.round(((from + loaded) / total) * 100))));
+      if (!tag) throw new UploadError("The upload couldn't be confirmed. Please try again.", false);
+      return tag;
+    });
+    parts.push({ PartNumber: partNumber, ETag: etag });
+    start = end;
+    n++;
+  }
+  const done = await withRetries(4, () => r2Call(user, { action: "complete", key, uploadId, parts }));
+  onProgress?.(100);
+  return done.publicUrl as string;
+}
+
+/**
+ * Voice notes: Android records WebM and iPhones record MP4, and not every phone can play the
+ * other's. Re-encode to a small mono WAV that plays everywhere. Falls back to the original on any error.
+ */
+async function audioToWav(file: File): Promise<File> {
+  try {
+    const AC: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC) return file;
+    const ctx = new AC();
+    const decoded = await ctx.decodeAudioData(await file.arrayBuffer());
+    ctx.close?.();
+    const RATE = 16000;
+    const length = Math.max(1, Math.ceil(decoded.duration * RATE));
+    const off = new OfflineAudioContext(1, length, RATE);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start();
+    const rendered = await off.startRendering();
+    const samples = rendered.getChannelData(0);
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const v = new DataView(buf);
+    const w = (o: number, str: string) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, RATE, true); v.setUint32(28, RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, "data"); v.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) {
+      const x = Math.max(-1, Math.min(1, samples[i]));
+      v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+    }
+    return new File([buf], (file.name || "voice").replace(/\.[^.]+$/, "") + ".wav", { type: "audio/wav" });
+  } catch {
+    return file;
+  }
+}
+
 function deliveryUrl(url: string, kind: "image" | "video", isAudio: boolean): string {
   // Delivery: photos get auto format/quality and a max width. Videos are
   // always served as H.264 .mp4 — the one format every phone plays — even
   // when the original was HEVC/.mov/.3gp from a camera app.
-  if (kind === "image") return url.replace("/upload/", "/upload/f_auto,q_auto,w_1600,c_limit/");
+  if (kind === "image") return url.replace("/upload/", "/upload/f_auto,q_auto,w_1080,c_limit/");
   // Voice notes: Android records WebM and iPhones MP4/AAC, so serve MP3, which plays everywhere.
   if (isAudio) return url.replace(/\.[A-Za-z0-9]+$/, ".mp3");
-  return url.replace("/upload/", "/upload/vc_h264,q_auto/").replace(/\.[A-Za-z0-9]+$/, ".mp4");
+  return url.replace("/upload/", "/upload/vc_h264,q_auto:eco,w_720,c_limit/").replace(/\.[A-Za-z0-9]+$/, ".mp4");
 }
 
 
@@ -264,7 +416,8 @@ export async function uploadImage(path: string, file: File, onProgress?: (pct: n
   const done = uploadedUrls.get(file);
   if (done) return done;
 
-  const toSend = isImageFile(file) ? await prepareImage(file) : file;
+  let toSend = isImageFile(file) ? await prepareImage(file) : file;
+  if (fileContentType(toSend).startsWith("audio/") && r2Available !== false) toSend = await audioToWav(toSend);
   const contentType = fileContentType(toSend);
   if (contentType.startsWith("image/") && toSend.size > MAX_IMAGE_BYTES) {
     throw new Error("That image is too large (max 10MB).");
@@ -273,6 +426,20 @@ export async function uploadImage(path: string, file: File, onProgress?: (pct: n
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in again.");
   const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : path;
+
+  // Main path: Cloudflare R2 (when the server is set up for it).
+  if (r2Available !== false) {
+    if (/^image\/(heic|heif)$/.test(contentType)) {
+      throw new Error("That photo format isn't supported. Please choose a JPG or PNG photo.");
+    }
+    const r2Url = await uploadViaR2(user, folder, toSend, contentType, onProgress);
+    if (r2Url) {
+      uploadedUrls.set(file, r2Url);
+      return r2Url;
+    }
+  }
+
+  // Fallback: Cloudinary (used only until R2 is set up on the server).
   const isAudio = contentType.startsWith("audio/");
   const kind = contentType.startsWith("video/") || isAudio ? "video" : "image";
   const endpoint = (cloudName: string) => `https://api.cloudinary.com/v1_1/${cloudName}/${kind}/upload`;

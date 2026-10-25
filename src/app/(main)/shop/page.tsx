@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { VerifiedTick } from "@/components/shared/VerifiedBadge";
 import { useAuth } from "@/providers/AuthProvider";
 import { callStars, useStars } from "@/hooks/useStars";
+import { STAR_RULES } from "@/lib/starsCatalog";
 import { deleteShopItem, setShopItemSold, SHOP_CATEGORIES, useCreateShopItem, useShopItems, useShopOrders } from "@/hooks/useShop";
 import { getOrCreateThread, threadIdFor } from "@/hooks/useMessages";
 import { ShopRulesList } from "@/components/shop/ShopRules";
@@ -431,9 +432,10 @@ function SellDialog({ onClose }: { onClose: () => void }) {
             </span>
           </label>
           {showRules && <ShopRulesList className="list-decimal space-y-1.5 rounded-lg bg-muted p-3 pl-8 text-xs text-steel/80" />}
+          <p className="text-xs text-steel/60">Posting something for sale costs {STAR_RULES.sellFee} 🪙 PlayCoins.</p>
           {err && <p className="text-sm text-signal-red">{err}</p>}
           <Button className="w-full" disabled={create.isPending} onClick={submit}>
-            {create.isPending ? "Posting…" : "Post item"}
+            {create.isPending ? "Posting…" : `Post item · ${STAR_RULES.sellFee} 🪙`}
           </Button>
         </div>
       </DialogContent>

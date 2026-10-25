@@ -7,7 +7,7 @@ import { VerifiedTick } from "@/components/shared/VerifiedBadge";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Copy, CornerUpLeft, ImagePlus, Play, Search, RotateCw, Send, Trash2, Video, X } from "lucide-react";
+import { ArrowLeft, Palette, Copy, CornerUpLeft, ImagePlus, Play, Search, RotateCw, Send, Trash2, Video, X } from "lucide-react";
 import { doc, getDoc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
@@ -20,10 +20,15 @@ import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { videoPoster, validateImageFile, validateVideoFile } from "@/lib/firebase/storage-helpers";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { MentionInput } from "@/components/shared/MentionInput";
+import { useDraft } from "@/hooks/useDraft";
+import { useStars } from "@/hooks/useStars";
+import { bubbleStyle, wallpaperStyle } from "@/lib/starsCatalog";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/shared/PageLoader";
 import { VoiceNoteControl } from "@/components/chat/VoiceNoteControl";
 import { VoicePlayer } from "@/components/chat/VoicePlayer";
+import { StickerPicker, StickerView } from "@/components/chat/StickerPicker";
 import { cn } from "@/lib/utils";
 import type { PostAuthorSnapshot } from "@/types";
 
@@ -33,7 +38,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [text, setText] = useState("");
+  const [text, setText] = useDraft(`dm-${params.threadId}`);
   const bottomRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +75,8 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
   const lastTypingWrite = useRef(0);
   const [viewer, setViewer] = useState<{ url: string; type: "image" | "video" } | null>(null);
   const { online, lastActive } = usePresence(other?.uid);
+  const myStars = useStars(profile?.uid);
+  const otherStars = useStars(other?.uid);
 
   // "typing…": watch the other person's typing stamp on the thread document.
   useEffect(() => {
@@ -232,11 +239,14 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
             {otherTyping ? "typing…" : online ? "Online" : lastActive ? lastSeenLabel(lastActive) : `@${other.username}`}
           </p>
         </Link>
+        <Link href="/stars#extras" aria-label="Customise chat" className="ml-auto rounded-lg p-2 text-steel/60 hover:bg-muted">
+          <Palette className="h-4 w-4" />
+        </Link>
         <button
           type="button"
           aria-label="Search in chat"
           onClick={() => { setSearching((v) => !v); setQuery(""); }}
-          className="ml-auto rounded-lg p-2 text-steel/60 hover:bg-muted"
+          className="rounded-lg p-2 text-steel/60 hover:bg-muted"
         >
           <Search className="h-4 w-4" />
         </button>
@@ -250,7 +260,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
 
       <div
         className="flex-1 overflow-y-auto bg-muted/50 px-3 py-4"
-        style={{ backgroundImage: "radial-gradient(hsl(var(--violet) / 0.10) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
+        style={wallpaperStyle(myStars.chat?.wallpaper) ?? { backgroundImage: "radial-gradient(hsl(var(--violet) / 0.10) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
       >
         <p className="mx-auto max-w-xs rounded-xl bg-card px-3 py-1.5 text-center text-[11px] text-steel/60 shadow-sm">
           🔒 Private chat — only you and the other person can see these messages.
@@ -277,7 +287,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
               <div className={cn("flex items-center gap-2", isMine ? "justify-end" : "justify-start")}>
                 {showActions && (
                   <button
-                    onClick={() => { setReplyTo({ id: m.id, name: isMine ? "You" : other.displayName, text: m.text || (m.mediaType === "audio" ? "🎤 Voice note" : m.mediaType === "video" ? "📹 Video" : "📷 Photo") }); setActiveMessageId(null); }}
+                    onClick={() => { setReplyTo({ id: m.id, name: isMine ? "You" : other.displayName, text: m.text || (m.sticker ? "🎟️ Sticker" : m.mediaType === "audio" ? "🎤 Voice note" : m.mediaType === "video" ? "📹 Video" : "📷 Photo") }); setActiveMessageId(null); }}
                     className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1.5 text-[11px] font-medium text-steel/70"
                     title="Reply"
                   >
@@ -294,6 +304,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
                   </button>
                 )}
                 <div
+                  style={m.sticker ? { background: "transparent", boxShadow: "none" } : bubbleStyle(isMine ? myStars.chat?.bubble : otherStars.chat?.bubble)}
                   {...(isMine
                     ? longPress(() => {
                         if (confirm("Delete this message?")) deleteMessage.mutate(m.id);
@@ -317,6 +328,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
                       <p className="line-clamp-2 opacity-80">{m.replyTo.text}</p>
                     </div>
                   )}
+                  {m.sticker && <StickerView id={m.sticker} />}
                   {m.mediaUrl && m.mediaType === "audio" && (
                     <VoicePlayer url={m.mediaUrl} duration={m.mediaDuration} mine={isMine} />
                   )}
@@ -351,7 +363,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
                     </div>
                   )}
                   {m.text && <p className={cn("whitespace-pre-wrap break-words", m.mediaUrl && m.mediaType !== "audio" && "px-2 py-1.5")}><Linkify text={m.text} /></p>}
-                  <span className={cn("mt-0.5 block text-right text-[10px]", isMine ? "text-white/75" : "text-steel/50", m.mediaUrl && m.mediaType !== "audio" && "px-2 pb-1")}>
+                  <span className={cn("mt-0.5 block text-right text-[10px]", m.sticker ? "text-steel/60" : isMine ? "text-white/75" : "text-steel/50", m.mediaUrl && m.mediaType !== "audio" && "px-2 pb-1")}>
                     {sentAt ? clockTime(sentAt) : "sending…"}
                   </span>
                 </div>
@@ -392,7 +404,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
       {checkingAttachment && <p className="mx-3 mb-1 text-xs text-steel/50">Checking video…</p>}
       {attachError && <p className="mx-3 mb-1 text-xs text-signal-red">{attachError}</p>}
 
-      <div className="relative flex items-center gap-1.5 border-t border-border bg-card px-2 py-2">
+      <div className="relative flex items-end gap-1.5 border-t border-border bg-card px-2 py-2">
         <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
         <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
         <button
@@ -427,12 +439,25 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
             setReplyTo(null);
           }}
         />
-        <Input
+        <StickerPicker
+          disabled={sendMessage.isPending}
+          onPick={async (id) => {
+            if (!profile) return;
+            try {
+              await sendMessage.mutateAsync({ text: "", senderId: profile.uid, sticker: id, replyTo });
+              setReplyTo(null);
+            } catch {
+              setAttachError("Couldn't send that sticker — please try again.");
+            }
+          }}
+        />
+        <MentionInput
           value={text}
-          onChange={(e) => noteTyping(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          onValueChange={noteTyping}
+          onSubmit={handleSend}
           placeholder="Message"
-          className="h-11 rounded-full bg-muted px-4"
+          maxLength={2000}
+          className="rounded-3xl"
         />
         <Button size="icon" className="h-11 w-11 shrink-0 rounded-full" onClick={handleSend} disabled={(!text.trim() && !attachment) || sendMessage.isPending || checkingAttachment}>
           <Send className="h-4 w-4" />

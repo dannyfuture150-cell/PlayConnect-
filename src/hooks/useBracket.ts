@@ -2,6 +2,7 @@
 
 import { pushAlert } from "@/lib/pushClient";
 import { createNotification } from "@/hooks/useNotifications";
+import { callStars } from "@/hooks/useStars";
 import { canonicalGame } from "@/lib/leaderboardGames";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -152,6 +153,8 @@ export function useGenerateBracket(tournamentId: string) {
         });
       }
 
+      // Mark the tournament as started, so players can no longer leave it (also enforced in the rules).
+      batch.update(doc(db, "tournaments", tournamentId), { bracketStarted: true });
       await batch.commit();
 
       // Second pass: write bye winners into the next round's slots now that
@@ -168,7 +171,11 @@ export function useGenerateBracket(tournamentId: string) {
       }
 
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tournaments"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tournaments"] });
+      // Starting the bracket releases the organiser's PlayCoins entry fees.
+      callStars({ action: "sync" }).catch(() => undefined);
+    },
   });
 }
 

@@ -22,6 +22,8 @@ const COPY: Record<AppNotification["type"], string> = {
   advanced: "Bracket updated 🔥",
   result_reversed: "reversed a match result — the score will be entered again",
   challenge: "challenged you to a match ⚔️",
+  mention: "mentioned you 💬",
+  coins: "sent you PlayCoins 🪙",
 };
 
 const ICON: Record<AppNotification["type"], typeof Heart> = {
@@ -41,9 +43,13 @@ const ICON: Record<AppNotification["type"], typeof Heart> = {
   advanced: Trophy,
   result_reversed: Trophy,
   challenge: Trophy,
+  mention: MessageCircle,
+  coins: Trophy,
 };
 
 function linkFor(n: AppNotification): string {
+  if (n.link) return n.link;
+  if (n.type === "result_submitted" && n.tournamentId && !n.leagueId) return `/tournaments/${n.tournamentId}#results`;
   if (n.type === "follow") return `/profile/${n.fromUser.username}`;
   if (n.type === "trophy_win" && n.tournamentId) return `/tournaments/${n.tournamentId}`;
   if (n.leagueId && ["result_submitted", "result_approved", "result_rejected"].includes(n.type)) return `/leagues/${n.leagueId}`;
@@ -66,7 +72,7 @@ export function NotificationItem({ notification }: { notification: AppNotificati
         </Avatar>
         <div className="flex-1 text-sm">
           <span className="font-semibold text-foreground">{notification.fromUser.displayName}</span>{" "}
-          <span className="text-steel/70">{notification.type === "advanced" ? `Bracket updated — you moved to the ${notification.roundLabel || "next round"} 🔥` : COPY[notification.type]}</span>
+          <span className="text-steel/70">{notification.type === "advanced" ? `Bracket updated — you moved to the ${notification.roundLabel || "next round"} 🔥` : notification.type === "coins" && notification.amount ? `sent you ${notification.amount} PlayCoins 🪙` : COPY[notification.type]}</span>
           <p className="text-xs text-steel/40">
             {notification.createdAt ? formatDistanceToNow(notification.createdAt.toDate(), { addSuffix: true }) : "just now"}
           </p>

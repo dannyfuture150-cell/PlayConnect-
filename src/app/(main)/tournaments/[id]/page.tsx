@@ -233,6 +233,16 @@ export default function TournamentDetailPage({ params }: { params: { id: string 
               {isStars && starsBusy ? "Please wait…" : isStars && isJoined ? "Joined · tap to leave" : joinButtonLabel()}
             </Button>
           )}
+          {!isOrganizer && profile && isJoined && bracketStarted && (
+            <p className="w-full text-xs text-steel/60">The bracket has started, so you can&apos;t leave this tournament now.</p>
+          )}
+          {isStars && isOrganizer && (
+            <p className="w-full text-xs text-steel/60">
+              {bracketStarted
+                ? <>Entry fees are paid into your <Link href="/stars" className="text-violet-glow underline">PlayCoins</Link> when the bracket starts — check your history.</>
+                : <>Players pay {starsFee} 🪙 each. The fees ({(tournament.participantIds?.length ?? 0)} joined so far) are held safely and paid into your PlayCoins the moment you start the bracket. If you delete the tournament first, everyone is refunded.</>}
+            </p>
+          )}
           {isStars && profile && !isOrganizer && !bracketStarted && (
             <p className="w-full text-xs text-steel/60">
               You have <span className="font-semibold text-foreground">{myStars} 🪙</span>.{" "}
@@ -259,7 +269,7 @@ export default function TournamentDetailPage({ params }: { params: { id: string 
               {onWaitlist ? "On the list ✓" : "Notify me"}
             </Button>
           )}
-          {toggleJoin.isError && <p className="text-xs text-signal-red">Couldn&apos;t update your spot. Check your connection and try again.</p>}
+          {toggleJoin.isError && <p className="text-xs text-signal-red">{(toggleJoin.error as Error)?.message?.startsWith("The bracket") ? (toggleJoin.error as Error).message : "Couldn't update your spot. Check your connection and try again."}</p>}
 
           {isOrganizer && (
             <div className="flex flex-wrap items-center gap-2">

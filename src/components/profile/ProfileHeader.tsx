@@ -15,7 +15,7 @@ import { ReportUserButton } from "@/components/profile/ReportUserButton";
 import { VerifiedBadge } from "@/components/shared/VerifiedBadge";
 import { hasVerifiedBadge } from "@/lib/verified";
 import { useStars } from "@/hooks/useStars";
-import { bannerStyle, nameStyle, titleText } from "@/lib/starsCatalog";
+import { bannerStyle, nameStyle, PROFILE_BGS, titleText } from "@/lib/starsCatalog";
 import { Framed } from "@/components/stars/Framed";
 import { GamerCard } from "@/components/profile/GamerCard";
 import { ChallengeButton } from "@/components/challenges/ChallengeDialog";
@@ -26,7 +26,8 @@ export function ProfileHeader({ profile }: { profile: UserProfile }) {
   const isOwnProfile = viewer?.uid === profile.uid;
   const router = useRouter();
   const hasStory = useHasStory(profile.uid);
-  const { equipped } = useStars(profile.uid);
+  const { equipped, profileBg } = useStars(profile.uid);
+  const bgStyle = profileBg?.type === "preset" ? PROFILE_BGS[profileBg.value]?.style : profileBg?.type === "image" ? { backgroundImage: `url("${profileBg.value}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined;
   const banner = bannerStyle(equipped.banner);
   const title = titleText(equipped.title);
 
@@ -38,7 +39,13 @@ export function ProfileHeader({ profile }: { profile: UserProfile }) {
         )}
       </div>
 
-      <div className="bg-card px-6 pb-6">
+      <div className="relative isolate bg-card px-6 pb-6">
+        {bgStyle && (
+          <>
+            <div aria-hidden className="absolute inset-0 -z-10" style={bgStyle} />
+            <div aria-hidden className="absolute inset-0 -z-10 bg-card/70" />
+          </>
+        )}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="-mt-10 flex items-end gap-4">
             <button

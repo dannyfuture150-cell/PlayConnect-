@@ -19,7 +19,14 @@ export function PendingResults({
 
   const byId = new Map(matches.map((m) => [m.id, m]));
   const pending = results.filter((r) => r.status === "pending" && byId.get(r.matchId) && !byId.get(r.matchId)!.winnerId);
-  if (pending.length === 0) return null;
+  const rawPending = results.filter((r) => r.status === "pending").length;
+  if (pending.length === 0) {
+    return rawPending > 0 ? (
+      <p className="rounded-xl bg-muted p-3 text-xs text-steel/70">
+        {rawPending} submitted result{rawPending === 1 ? "" : "s"} for matches that are already decided, so nothing to approve. Use the reverse button on the match if the score was wrong.
+      </p>
+    ) : null;
+  }
   const perMatch = new Map<string, MatchResult[]>();
   pending.forEach((r) => perMatch.set(r.matchId, [...(perMatch.get(r.matchId) ?? []), r]));
 

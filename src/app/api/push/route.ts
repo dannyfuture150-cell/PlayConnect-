@@ -32,9 +32,12 @@ const NOTIF_COPY: Record<string, string> = {
   tournament_reminder: "— your tournament starts soon!",
   advanced: "— bracket updated!",
   result_reversed: "reversed a match result",
+  mention: "mentioned you 💬",
 };
 
 function notifLink(type: string, n: any): string {
+  if (typeof n.link === "string" && n.link.startsWith("/")) return n.link;
+  if (type === "result_submitted" && n.tournamentId && !n.leagueId) return `/tournaments/${n.tournamentId}#results`;
   if (type === "follow") return n.fromUser?.username ? `/profile/${n.fromUser.username}` : "/notifications";
   if (n.leagueId && ["result_submitted", "result_approved", "result_rejected"].includes(type)) return `/leagues/${n.leagueId}`;
   if (n.tournamentId && ["result_submitted", "result_approved", "result_rejected", "match_ready", "spot_open", "tournament_reminder", "advanced", "result_reversed"].includes(type)) return `/tournaments/${n.tournamentId}`;
@@ -106,7 +109,7 @@ export async function POST(req: Request) {
       if (!other) return NextResponse.json({ ok: false });
       await msgRef.update({ pushed: true });
       const name = thread.participants?.[callerUid]?.displayName ?? "New message";
-      const preview = msg.text || (msg.mediaType === "audio" ? "🎤 Voice note" : msg.mediaType === "video" ? "📹 Video" : msg.mediaType === "image" ? "📷 Photo" : "New message");
+      const preview = msg.text || (msg.sticker ? "🎟️ Sticker" : msg.mediaType === "audio" ? "🎤 Voice note" : msg.mediaType === "video" ? "📹 Video" : msg.mediaType === "image" ? "📷 Photo" : "New message");
       await sendToUids([other], {
         title: name,
         body: String(preview).slice(0, 120),
