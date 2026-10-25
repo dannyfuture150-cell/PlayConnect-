@@ -14,7 +14,7 @@ export interface StarsDoc {
   shields?: number;
   chat?: { bubble?: string | null; wallpaper?: string | null };
   profileBg?: { type: "preset" | "image"; value: string } | null;
-  equipped: { frame?: string | null; cardstyle?: string | null; title?: string | null; namecolor?: string | null; banner?: string | null };
+  equipped: { frame?: string | null; cardstyle?: string | null; title?: string | null; namecolor?: string | null; banner?: string | null; unlock?: string | null };
 }
 
 const EMPTY: StarsDoc = { balance: 0, lifetime: 0, loginStreak: 0, owned: [], equipped: {} };
