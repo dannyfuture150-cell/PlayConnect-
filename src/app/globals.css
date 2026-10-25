@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Neutral base, like Instagram / X / YouTube: plain white in light mode and
+     plain near-black in dark mode. The accent (violet, blue or green) only
+     colours buttons, links, highlights and active icons — never the page. */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 42%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --radius: 1rem;
+
+    /* Top bar, side menu and bottom tabs */
+    --chrome-bg: 0 0% 100%;
+    --chrome-foreground: 0 0% 9%;
+    --chrome-border: 0 0% 90%;
+    --chrome-muted: 0 0% 96%;
+
+    /* Accent: violet (default) */
+    --violet: 262 83% 58%;
+    --violet-deep: 263 70% 50%;
+    --violet-glow: 262 83% 55%;
+    --cyan: 292 84% 55%;
+    --cyan-deep: 292 84% 48%;
+    --ring: 262 83% 58%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 96%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 65%;
+    --border: 0 0% 17%;
+    --input: 0 0% 17%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --chrome-bg: 0 0% 4%;
+    --chrome-foreground: 0 0% 96%;
+    --chrome-border: 0 0% 17%;
+    --chrome-muted: 0 0% 11%;
+
+    --violet: 262 90% 68%;
+    --violet-deep: 262 80% 58%;
+    --violet-glow: 262 95% 76%;
+    --cyan: 300 85% 70%;
+    --cyan-deep: 300 80% 60%;
+    --ring: 262 90% 68%;
+  }
+
+  /* Accent: blue */
+  [data-accent="blue"] {
+    --violet: 217 91% 52%;
+    --violet-deep: 221 83% 46%;
+    --violet-glow: 217 91% 50%;
+    --cyan: 200 98% 40%;
+    --cyan-deep: 201 96% 32%;
+    --ring: 217 91% 52%;
+  }
+  .dark[data-accent="blue"] {
+    --violet: 213 94% 62%;
+    --violet-deep: 217 91% 54%;
+    --violet-glow: 212 96% 72%;
+    --cyan: 198 93% 60%;
+    --cyan-deep: 199 89% 48%;
+    --ring: 213 94% 62%;
+  }
+
+  /* Accent: green */
+  [data-accent="green"] {
+    --violet: 152 66% 33%;
+    --violet-deep: 156 70% 27%;
+    --violet-glow: 152 66% 30%;
+    --cyan: 172 68% 36%;
+    --cyan-deep: 172 70% 30%;
+    --ring: 152 66% 33%;
+  }
+  .dark[data-accent="green"] {
+    --violet: 152 64% 46%;
+    --violet-deep: 152 68% 38%;
+    --violet-glow: 150 70% 60%;
+    --cyan: 172 72% 48%;
+    --cyan-deep: 172 70% 40%;
+    --ring: 152 64% 46%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-void text-steel font-body antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  ::selection {
+    background-color: hsl(var(--violet) / 0.18);
+  }
+
+  /* Respect reduced-motion preferences across the app */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Never let wide content (brackets, story rows, tab strips) drag the whole
+   page sideways — only their own scroll container moves. */
+html, body { overflow-x: hidden; max-width: 100%; }
+.overflow-x-auto { overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+
+@keyframes pcShimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
+@keyframes pcGlow {
+  0%, 100% { box-shadow: 0 0 4px 0 var(--glow, #fff); }
+  50% { box-shadow: 0 0 14px 3px var(--glow, #fff); }
+}

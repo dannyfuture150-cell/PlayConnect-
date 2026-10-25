@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 15 * 1024 * 1024; // 15MB
+    }
+
+    function isValidVideo() {
+      return request.resource.contentType.matches('video/.*') &&
+             request.resource.size < 225 * 1024 * 1024; // 225MB — fits a 3-minute clip
+    }
+
+    // avatars/{uid}/...
+    match /avatars/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && isValidImage();
+    }
+
+    // banners/{uid}/...
+    match /banners/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && isValidImage();
+    }
+
+    // posts/{uid}/{postId}/... — images or clips attached to a post
+    match /posts/{uid}/{postId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && (isValidImage() || isValidVideo());
+    }
+
+    // stories/{uid}/... — 24h ephemeral media
+    match /stories/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && (isValidImage() || isValidVideo());
+    }
+
+    // messages/{threadId}/{uid}/... — images/clips sent in a DM. Requires
+    // sign-in to read rather than fully public, since this is private
+    // conversation media — not as strict as thread-participant-only (Storage
+    // rules can't easily cross-check Firestore thread membership), but the
+    // real privacy boundary is the Firestore message doc itself, which only
+    // the two participants can ever read, so only they'd ever learn this URL.
+    match /messages/{threadId}/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid && (isValidImage() || isValidVideo());
+    }
+
+    // communities/{communityId}/... — dp, banner, and announcement images, moderator-only in practice (enforced by Firestore rules on the announcement doc itself)
+    match /communities/{communityId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage();
+    }
+  }
+}

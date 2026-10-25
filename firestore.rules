@@ -1,0 +1,406 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // Only organiser accounts can create tournaments/leagues — players and
+    // organisers are the same platform, just different permissions.
+    function isOrganizer() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == "organizer";
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+      allow read: if true; // public profiles
+      allow create: if isOwner(uid);
+      allow update: if isAdmin() ||
+        // owners can edit their own profile, but once the account type is
+        // locked (set at sign-up) they can't change it or unlock it
+        (isOwner(uid) &&
+          !(resource.data.get('accountTypeLocked', false) == true &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['accountType', 'accountTypeLocked']))) ||
+        // allow any signed-in user to bump counters on someone else's profile
+        // (followersCount/followingCount/postsCount change as a side effect
+        // of another user's action, e.g. following them or posting)
+        (isSignedIn() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['followersCount', 'followingCount', 'postsCount', 'tournamentWins', 'gameWins', 'badges']));
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    // Username reservations: one doc per unique username, id == username
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin(); // only when an admin permanently deletes the account that owns it
+    }
+
+    // ---------- posts ----------
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn() &&
+        (resource.data.authorId == request.auth.uid || isAdmin() ||
+         // allow counter-only updates from any signed-in user (likes/comments handled via subcollections)
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['likesCount', 'commentsCount', 'sharesCount', 'savesCount']));
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+
+      function isPostAuthor() {
+        return isSignedIn() &&
+          get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid;
+      }
+
+      match /likes/{likeUid} {
+        allow read: if true;
+        allow create: if isOwner(likeUid);
+        allow delete: if isOwner(likeUid) || isPostAuthor() || isAdmin();
+      }
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+        allow delete: if isSignedIn() &&
+          (resource.data.authorId == request.auth.uid || isPostAuthor() || isAdmin() ||
+           resource.data.get('parentAuthorId', null) == request.auth.uid);
+      }
+    }
+
+    // ---------- stories (24h expiring) ----------
+    match /stories/{storyId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn(); // viewer-list appends
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // ---------- followers ----------
+    // followers/{uid}/list/{followerId} — followerId following uid
+    match /followers/{uid}/list/{followerId} {
+      allow read: if true;
+      allow create, delete: if isOwner(followerId);
+    }
+
+    // following/{uid}/list/{targetId} — uid follows targetId
+    match /following/{uid}/list/{targetId} {
+      allow read: if true;
+      allow create, delete: if isOwner(uid);
+    }
+
+    // ---------- messages (private DMs) ----------
+    // threads/{threadId} — id is `${uidA}_${uidB}` (sorted) by convention,
+    // but access control is based on the participantIds field, not the ID,
+    // so list queries (where participantIds array-contains uid) work too.
+    match /threads/{threadId} {
+      // resource == null lets the app check whether a thread exists before creating it
+      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.participantIds);
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participantIds;
+      allow update: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/threads/$(threadId)).data.participantIds;
+        allow create: if isSignedIn() &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.auth.uid in get(/databases/$(database)/documents/threads/$(threadId)).data.participantIds;
+        allow update: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/threads/$(threadId)).data.participantIds;
+        allow delete: if isSignedIn() && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // ---------- challenges (1v1 match requests) ----------
+    match /challenges/{challengeId} {
+      allow read: if true;
+      allow create: if isSignedIn() &&
+        request.resource.data.challengerId == request.auth.uid &&
+        request.auth.uid in request.resource.data.participantIds &&
+        request.resource.data.status == 'pending';
+      allow update: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow delete: if isSignedIn() && (resource.data.challengerId == request.auth.uid || isAdmin());
+    }
+
+    // ---------- stars (only the server writes these) ----------
+    match /stars/{uid} {
+      allow read: if true;
+      allow write: if false;
+      match /log/{logId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+    }
+
+    // ---------- shop ----------
+    match /shopItems/{itemId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid &&
+        request.resource.data.get('reservedBy', null) == null;
+      // 'reservedBy' (someone paid with PlayStars) can only be changed by the server
+      allow update: if isSignedIn() &&
+        (isAdmin() ||
+         (resource.data.sellerId == request.auth.uid &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reservedBy'])));
+      allow delete: if isSignedIn() &&
+        ((resource.data.sellerId == request.auth.uid && resource.data.get('reservedBy', null) == null) || isAdmin());
+    }
+
+    // PlayStars shop orders: players can read their own, only the server writes them
+    match /shopOrders/{orderId} {
+      allow read: if isSignedIn() && (request.auth.uid in resource.data.participantIds || isAdmin());
+      allow write: if false;
+    }
+
+    // ---------- communities ----------
+    match /communities/{communityId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() &&
+        // the creator can change anything (admins, chat mode, ...)
+        (resource.data.createdBy == request.auth.uid || isAdmin() ||
+         // other admins can manage the group but not who the admins are or the chat mode
+         (request.auth.uid in resource.data.moderatorIds &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['moderatorIds', 'createdBy', 'chatMode'])) ||
+         // self-service join/leave: only memberIds + memberCount may change
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'memberCount'])) ||
+         // a member sending a chat message bumps the "new message" marker
+         (request.auth.uid in resource.data.memberIds &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastChatAt', 'lastChatBy'])));
+      allow delete: if isSignedIn() && (request.auth.uid in resource.data.moderatorIds || isAdmin());
+
+      // Group chat: anyone signed in can read; only members can send, and
+      // only admins unless the creator opened chat to everyone.
+      match /chat/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.auth.uid in get(/databases/$(database)/documents/communities/$(communityId)).data.memberIds &&
+          (get(/databases/$(database)/documents/communities/$(communityId)).data.get('chatMode', 'admins') == 'everyone' ||
+           request.auth.uid in get(/databases/$(database)/documents/communities/$(communityId)).data.moderatorIds);
+        allow delete: if isSignedIn() &&
+          (resource.data.authorId == request.auth.uid ||
+           request.auth.uid in get(/databases/$(database)/documents/communities/$(communityId)).data.moderatorIds ||
+           isAdmin());
+      }
+
+      match /announcements/{announcementId} {
+        allow read: if true;
+        allow create: if isSignedIn() &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.auth.uid in get(/databases/$(database)/documents/communities/$(communityId)).data.moderatorIds;
+        allow update, delete: if isSignedIn() &&
+          (request.auth.uid in get(/databases/$(database)/documents/communities/$(communityId)).data.moderatorIds ||
+           isAdmin());
+
+        // One emoji reaction per member per announcement (document id = the member's uid).
+        match /reactions/{userId} {
+          allow read: if true;
+          allow create, update: if isSignedIn() &&
+            request.auth.uid == userId &&
+            request.resource.data.uid == request.auth.uid &&
+            request.auth.uid in get(/databases/$(database)/documents/communities/$(communityId)).data.memberIds;
+          allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        }
+      }
+    }
+
+    // ---------- leagues ----------
+    match /leagues/{leagueId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isOrganizer() && request.resource.data.creatorId == request.auth.uid;
+      allow update: if isSignedIn() &&
+        (resource.data.creatorId == request.auth.uid || isAdmin() ||
+         // allow the teamsCount bump that happens when any signed-in
+         // player joins as a participant
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teamsCount']) ||
+         // self-service paid-entry join request
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingParticipantIds']));
+      allow delete: if isSignedIn() && (resource.data.creatorId == request.auth.uid || isAdmin());
+
+      function isLeagueCreator() {
+        return isSignedIn() &&
+          get(/databases/$(database)/documents/leagues/$(leagueId)).data.creatorId == request.auth.uid;
+      }
+
+      // Fixture results sent in by the two players (score + screenshot)
+      // for the organiser to approve.
+      function inFixture(matchId) {
+        return request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(get(/databases/$(database)/documents/leagues/$(leagueId)/matches/$(matchId)).data.homeTeamId)).data.memberIds ||
+               request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)/teams/$(get(/databases/$(database)/documents/leagues/$(leagueId)/matches/$(matchId)).data.awayTeamId)).data.memberIds;
+      }
+      match /results/{resultId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() &&
+          request.resource.data.submittedBy == request.auth.uid &&
+          request.resource.data.status == 'pending' &&
+          inFixture(request.resource.data.matchId);
+        allow update: if isLeagueCreator() || isAdmin();
+        allow delete: if isSignedIn() && (resource.data.submittedBy == request.auth.uid || isLeagueCreator() || isAdmin());
+      }
+
+      match /teams/{teamId} {
+        allow read: if true;
+        // Joining the league creates your own single-member "team" doc —
+        // only ever representing yourself, never anyone else.
+        allow create: if isSignedIn() &&
+          request.resource.data.memberIds.size() == 1 &&
+          (request.resource.data.memberIds[0] == request.auth.uid ||
+           // the league organiser approving someone's paid-entry request
+           isLeagueCreator());
+        // Score reporting (stat counters only) is creator-only, matching
+        // the UI — the organizer is the one who reports fixture results.
+        allow update: if isSignedIn() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['wins', 'draws', 'losses', 'goalsFor', 'goalsAgainst', 'points']) &&
+          (isLeagueCreator() || isAdmin());
+        allow delete: if isLeagueCreator() || isAdmin();
+      }
+
+      match /matches/{matchId} {
+        allow read: if true;
+        // The full fixture list is batch-generated by the creator when
+        // they start the league (see useStartLeague) — not created
+        // one-at-a-time at report time like the old ad-hoc model.
+        allow create: if isLeagueCreator();
+        allow update: if isLeagueCreator() || isAdmin();
+        allow delete: if isLeagueCreator() || isAdmin();
+      }
+    }
+
+    // ---------- tournaments ----------
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isOrganizer() && request.resource.data.organizerId == request.auth.uid;
+      allow update: if isSignedIn() &&
+        (resource.data.organizerId == request.auth.uid || isAdmin() ||
+         // free/paid tournaments: players add or remove themselves. Stars tournaments are joined through the server only.
+         (resource.data.get('entryType', 'free') != 'stars' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantIds', 'waitlistIds'])) ||
+         // wanting in when it is full
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlistIds']) ||
+         // the winner confirming they received the prize
+         (request.auth.uid == resource.data.get('winnerId', '') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prizeConfirmed'])) ||
+         // self-service paid-entry join request
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingParticipantIds']));
+      allow delete: if isSignedIn() && (resource.data.organizerId == request.auth.uid || isAdmin());
+
+      // Screenshots: anyone can look, but only players who joined this
+      // tournament (or its organiser) can post one.
+      match /shots/{shotId} {
+        allow read: if true;
+        allow create: if isSignedIn() &&
+          request.resource.data.authorId == request.auth.uid &&
+          (request.auth.uid in get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.participantIds ||
+           get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.organizerId == request.auth.uid);
+        allow delete: if isSignedIn() &&
+          (resource.data.authorId == request.auth.uid ||
+           get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.organizerId == request.auth.uid ||
+           isAdmin());
+      }
+
+      // Match results sent in by players (score + screenshot) for the
+      // organiser to approve. Only the two players in that match can submit.
+      match /results/{resultId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() &&
+          request.resource.data.submittedBy == request.auth.uid &&
+          request.resource.data.status == 'pending' &&
+          (get(/databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(request.resource.data.matchId)).data.player1Id == request.auth.uid ||
+           get(/databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(request.resource.data.matchId)).data.player2Id == request.auth.uid);
+        allow update: if isSignedIn() &&
+          (get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.organizerId == request.auth.uid || isAdmin());
+        allow delete: if isSignedIn() &&
+          (resource.data.submittedBy == request.auth.uid ||
+           get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.organizerId == request.auth.uid ||
+           isAdmin());
+      }
+
+      match /matches/{matchId} {
+        allow read: if true;
+        allow create: if isSignedIn() &&
+          get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.organizerId == request.auth.uid;
+        allow update: if isSignedIn() &&
+          (get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.organizerId == request.auth.uid ||
+           isAdmin());
+        allow delete: if isSignedIn() &&
+          (get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.organizerId == request.auth.uid ||
+           isAdmin());
+      }
+    }
+
+    // ---------- live streams (links to YouTube/Twitch/etc. lives + in-app chat) ----------
+    match /lives/{liveId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.hostId == request.auth.uid || isAdmin());
+
+      match /chat/{messageId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow delete: if isSignedIn() &&
+          (resource.data.authorId == request.auth.uid ||
+           get(/databases/$(database)/documents/lives/$(liveId)).data.hostId == request.auth.uid ||
+           isAdmin());
+      }
+    }
+
+    // ---------- notifications ----------
+    // notifications/{uid}/items/{notificationId}
+    match /notifications/{uid}/items/{notificationId} {
+      allow read, update: if isOwner(uid);
+      allow create: if isSignedIn(); // any signed-in user can trigger a notification for another user
+      allow delete: if isOwner(uid);
+    }
+
+    // ---------- reports ----------
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ---------- presence (who is online / last seen) ----------
+    match /presence/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid);
+    }
+
+    // ---------- ads (sponsored placements, admin-managed) ----------
+    match /ads/{adId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      // Admins can edit anything; everyone else may only bump the counters.
+      allow update: if isAdmin() ||
+        (isSignedIn() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['impressions', 'clicks']) &&
+         request.resource.data.impressions >= resource.data.impressions &&
+         request.resource.data.impressions <= resource.data.impressions + 1 &&
+         request.resource.data.clicks >= resource.data.clicks &&
+         request.resource.data.clicks <= resource.data.clicks + 1);
+    }
+
+    // ---------- badges (admin-managed catalog) ----------
+    match /badges/{badgeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
