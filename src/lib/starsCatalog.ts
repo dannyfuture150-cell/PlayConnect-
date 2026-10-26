@@ -70,7 +70,7 @@ export const STAR_RULES = {
   referrer: 10, // when a referred player joins their first tournament
   referee: 5, // welcome bonus for the player who was referred
   maxReferrals: 20,
-  createTournamentFee: 5, // organisers pay this each time they create a tournament
+  createTournamentFee: 2, // organisers pay this each time they create a tournament
   sellFee: 5, // sellers pay this each time they post something in the shop
   sendMinPosts: 3, // to send PlayCoins you need this many posts...
   sendMinTournaments: 1, // ...and to have joined this many tournaments (as a player)

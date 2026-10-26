@@ -210,7 +210,6 @@ export default function StarsPage() {
           <li>🪙 {STAR_RULES.win} for winning a tournament 🏆</li>
           <li>🪙 Weekly missions, up to {MISSIONS.reduce((n, m) => n + m.reward, 0) + STAR_RULES.missionAllBonus} a week</li>
           <li>🪙 {STAR_RULES.streakBigBonus} extra on every 30th day in a row</li>
-          <li>🪙 Spending: {STAR_RULES.createTournamentFee} to create a tournament, {STAR_RULES.sellFee} to post something for sale</li>
           <li>🪙 {STAR_RULES.challengeWin} for winning a confirmed 1v1 challenge (up to {STAR_RULES.challengeWinsPerDay} a day)</li>
         </ul>
         <p className="mt-2 text-xs text-steel/50">PlayCoins are added automatically. It can take a few minutes after you open the app.</p>
