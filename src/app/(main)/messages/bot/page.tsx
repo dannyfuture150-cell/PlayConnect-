@@ -52,8 +52,8 @@ export default function BotChatPage() {
   }
 
   return (
-    <div className="flex min-h-[70vh] flex-col gap-3">
-      <div className="flex items-center gap-3">
+    <div className="-mx-4 -mt-6 flex h-[calc(100dvh-1.5rem-env(safe-area-inset-top))] flex-col overflow-hidden border-y border-border bg-card md:mx-0 md:mt-0 md:h-[calc(100vh-6rem)] md:rounded-2xl md:border">
+      <div className="flex items-center gap-3 border-b border-border px-3 py-2">
         <Link href="/messages" aria-label="Back" className="rounded-full p-2 text-steel/70 hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
         </Link>
@@ -64,7 +64,7 @@ export default function BotChatPage() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-2">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
         {(inbox.data ?? []).map((n) => (
           <div key={n.id} className="flex justify-start">
             <div className="max-w-[85%] rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-foreground">
@@ -98,7 +98,7 @@ export default function BotChatPage() {
         <div ref={endRef} />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 border-t border-border px-3 pt-2">
         {QUICK_TOPICS.map((t) => (
           <button
             key={t}
@@ -113,7 +113,7 @@ export default function BotChatPage() {
       </div>
 
       <form
-        className="flex items-center gap-2"
+        className="flex items-center gap-2 px-3 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
         onSubmit={(e) => {
           e.preventDefault();
           ask(text);
