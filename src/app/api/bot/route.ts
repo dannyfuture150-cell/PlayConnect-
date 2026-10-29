@@ -52,7 +52,7 @@ async function matchesReady(db: Firestore, uid: string, tournamentId: string) {
   if (!allowed) return { ok: false, error: "Not allowed." };
 
   const all = await tRef.collection("matches").get();
-  const matches = all.docs.map((d) => ({ ref: d.ref, id: d.id, ...(d.data() as Record<string, any>) }));
+  const matches: any[] = all.docs.map((d) => ({ ...(d.data() as Record<string, any>), ref: d.ref, id: d.id }));
   const totalRounds = Math.max(1, ...matches.map((m) => Number(m.round) || 1));
   let told = 0;
   for (const m of matches) {
