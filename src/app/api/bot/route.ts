@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { initAdmin } from "@/lib/firebaseAdmin";
 import { getAuth } from "firebase-admin/auth";
-import { FieldValue, getFirestore, type Firestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, type Firestore, type DocumentReference } from "firebase-admin/firestore";
 import { botSay } from "@/lib/botServer";
 
 export const runtime = "nodejs";
@@ -59,9 +59,10 @@ async function matchesReady(db: Firestore, uid: string, tournamentId: string) {
     if (!m.player1Id || !m.player2Id || m.winnerId || m.isBye || m.botNotified) continue;
     // claim the match first so two quick calls can't both send
     const claimed = await db.runTransaction(async (tx) => {
-      const cur = await tx.get(m.ref);
+      const mRef = m.ref as DocumentReference;
+      const cur = await tx.get(mRef);
       if (!cur.exists || cur.data()?.botNotified) return false;
-      tx.update(m.ref, { botNotified: true });
+      tx.update(mRef, { botNotified: true });
       return true;
     });
     if (!claimed) continue;
