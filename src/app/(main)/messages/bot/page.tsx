@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/providers/AuthProvider";
 import { useBotInbox, useMarkBotRead } from "@/hooks/useBotInbox";
-import { answerFor, BOT_ANSWERS, BOT_FALLBACK, BOT_GREETING } from "@/lib/helpBot";
+import { answerFor, BOT_FALLBACK, BOT_GREETING } from "@/lib/helpBot";
+
+const QUICK_TOPICS = ["Join a tournament", "Play 1v1 now", "What are PlayCoins?"];
 
 interface Msg {
   id: number;
@@ -96,24 +98,19 @@ export default function BotChatPage() {
         <div ref={endRef} />
       </div>
 
-      {(["app", "gaming"] as const).map((g) => (
-        <div key={g}>
-          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-steel/50">{g === "app" ? "Using PlayConnect" : "Gaming tips"}</p>
-          <div className="flex flex-wrap gap-2">
-            {BOT_ANSWERS.filter((a) => (a.group ?? "app") === g).map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                disabled={typing}
-                onClick={() => ask(a.topic)}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-steel/80 active:scale-95 disabled:opacity-40"
-              >
-                {a.topic}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
+      <div className="flex flex-wrap gap-2">
+        {QUICK_TOPICS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            disabled={typing}
+            onClick={() => ask(t)}
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-steel/80 active:scale-95 disabled:opacity-40"
+          >
+            {t}
+          </button>
+        ))}
+      </div>
 
       <form
         className="flex items-center gap-2"

@@ -257,7 +257,7 @@ export const BOT_ANSWERS: BotAnswer[] = [
 ];
 
 export const BOT_GREETING =
-  "Hi, I'm the PlayConnect Bot 🤖. Ask me how PlayConnect works (“how do I join a tournament?”) or for gaming tips (“how do I defend better?”). You can also tap a topic below.";
+  "Hi, I'm the PlayConnect Bot 🤖. Ask me how PlayConnect works (“how do I join a tournament?”) or for gaming tips (“how do I defend better?”). Or tap a quick question below.";
 
 export const BOT_FALLBACK =
   "I'm not sure about that one. Try asking in different words, or tap a topic below. If it's something else, ask your tournament organiser or message an admin.";

@@ -11,12 +11,12 @@ import { SetupChecklist } from "@/components/feed/SetupChecklist";
 export default function FeedPage() {
   return (
     <div className="flex flex-col gap-5">
+      <StoriesRow />
       <PushPromptBanner />
       <BotHello />
       <PlayNowButton />
       <PlayButton />
       <SetupChecklist />
-      <StoriesRow />
       <FeedTournamentHub />
       <LiveNowStrip />
       <FeedList />
