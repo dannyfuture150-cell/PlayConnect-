@@ -3,6 +3,7 @@
 import { pushAlert } from "@/lib/pushClient";
 import { createNotification } from "@/hooks/useNotifications";
 import { callStars } from "@/hooks/useStars";
+import { callBot } from "@/lib/botClient";
 import { canonicalGame } from "@/lib/leaderboardGames";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -175,6 +176,8 @@ export function useGenerateBracket(tournamentId: string) {
       queryClient.invalidateQueries({ queryKey: ["tournaments"] });
       // Starting the bracket releases the organiser's PlayCoins entry fees.
       callStars({ action: "sync" }).catch(() => undefined);
+      // The bot tells players their first match is ready.
+      callBot({ action: "matches", tournamentId }).catch(() => undefined);
     },
   });
 }
@@ -278,7 +281,11 @@ export function useReportBracketResult(tournamentId: string, game: string, organ
       if (advanceRef && winner) pushAlert({ kind: "notification", toUid: winner.uid, notificationId: (advanceRef as ReturnType<typeof doc>).id });
       return { isFinal, winner };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tournaments"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tournaments"] });
+      // If a winner's next match now has both players, the bot tells them it's ready.
+      callBot({ action: "matches", tournamentId }).catch(() => undefined);
+    },
   });
 }
 

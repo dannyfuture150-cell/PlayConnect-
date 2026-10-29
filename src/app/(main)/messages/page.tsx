@@ -17,6 +17,7 @@ import { CreateCommunityDialog } from "@/components/communities/CreateCommunityD
 import type { Community, Thread } from "@/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useThreads } from "@/hooks/useMessages";
+import { useBotInbox } from "@/hooks/useBotInbox";
 import { usePresence } from "@/hooks/usePresence";
 import { listTime } from "@/lib/chatTime";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -35,6 +36,9 @@ export default function MessagesPage() {
 
   const [sheet, setSheet] = useState<{ kind: "chat"; thread: Thread } | { kind: "group"; community: Community } | null>(null);
   const [search, setSearch] = useState("");
+  const botInbox = useBotInbox(profile?.uid);
+  const botUnread = (botInbox.data ?? []).filter((n) => !n.read).length;
+  const botLast = (botInbox.data ?? [])[(botInbox.data ?? []).length - 1];
   const [filter, setFilter] = useState<"all" | "chats" | "groups">("all");
   const { data: communities } = useCommunities();
   const chatCounts = useChatUnreadCounts(profile?.uid, profile?.communityChatSeen);
@@ -136,6 +140,18 @@ export default function MessagesPage() {
       )}
 
       <div className="-mx-4 flex flex-col overflow-hidden border-y border-border bg-card md:mx-0 md:rounded-2xl md:border">
+        {!search.trim() && (
+          <Link href="/messages/bot" className="flex items-center gap-3 border-b border-border/60 px-4 py-3 active:bg-muted hover:bg-muted/60">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-2xl">🤖</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold text-foreground">PlayConnect Bot</p>
+              <p className={`truncate text-sm ${botUnread > 0 ? "font-medium text-foreground" : "text-steel/50"}`}>{botLast?.text ?? "Ask me how things work"}</p>
+            </div>
+            {botUnread > 0 && (
+              <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-bold text-white">{botUnread}</span>
+            )}
+          </Link>
+        )}
         {merged.map((item) => {
           if (item.kind === "group") {
             const c = item.community;

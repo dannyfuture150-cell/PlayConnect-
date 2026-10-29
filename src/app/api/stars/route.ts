@@ -85,7 +85,7 @@ async function syncEarnings(db: Firestore, uid: string) {
   const stars = db.doc(`stars/${uid}`);
   for (const c of cs.docs) {
     const d = c.data();
-    if (d.status !== "done" || d.winnerId !== uid) continue;
+    if (d.status !== "done" || d.winnerId !== uid || d.quick === true) continue; // quick matches never pay coins (can't be farmed)
     await db.runTransaction(async (tx) => {
       const log = db.doc(`stars/${uid}/log/chal_${c.id}`);
       const [s, l] = await Promise.all([tx.get(stars), tx.get(log)]);

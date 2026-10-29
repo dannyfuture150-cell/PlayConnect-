@@ -29,6 +29,7 @@ import { PageLoader } from "@/components/shared/PageLoader";
 import { VoiceNoteControl } from "@/components/chat/VoiceNoteControl";
 import { VoicePlayer } from "@/components/chat/VoicePlayer";
 import { StickerPicker, StickerView } from "@/components/chat/StickerPicker";
+import { QuickReplies } from "@/components/chat/QuickReplies";
 import { cn } from "@/lib/utils";
 import type { PostAuthorSnapshot } from "@/types";
 
@@ -404,6 +405,20 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
       {checkingAttachment && <p className="mx-3 mb-1 text-xs text-steel/50">Checking video…</p>}
       {attachError && <p className="mx-3 mb-1 text-xs text-signal-red">{attachError}</p>}
 
+      <div className="border-t border-border bg-card">
+        <QuickReplies
+          disabled={sendMessage.isPending}
+          onPick={async (t) => {
+            if (!profile) return;
+            try {
+              await sendMessage.mutateAsync({ text: t, senderId: profile.uid, replyTo });
+              setReplyTo(null);
+            } catch {
+              setAttachError("Couldn't send that — please try again.");
+            }
+          }}
+        />
+      </div>
       <div className="relative flex items-end gap-1.5 border-t border-border bg-card px-2 py-2">
         <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
         <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />

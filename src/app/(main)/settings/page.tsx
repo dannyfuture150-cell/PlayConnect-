@@ -13,6 +13,7 @@ import { AccountTypeSwitcher } from "@/components/profile/AccountTypeSwitcher";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AccentThemePicker } from "@/components/shared/AccentThemePicker";
 import { PushNotificationCard } from "@/components/shared/PushNotificationCard";
+import { BotMessagesToggle } from "@/components/shared/BotMessagesToggle";
 import { InstallAppCard } from "@/components/shared/InstallAppCard";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,7 @@ export default function SettingsPage() {
 
         <Tabs.Content value="notifications" className="mt-6">
           <PushNotificationCard />
+          <BotMessagesToggle />
         </Tabs.Content>
 
         <Tabs.Content value="app" className="mt-6">

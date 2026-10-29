@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, Check, Coins, Gift, Play, Trash2, Trophy, Users, X } from "lucide-react";
+import { CalendarDays, Check, Coins, Gift, ImageIcon, Play, Trash2, Trophy, Users, X } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -23,6 +23,9 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useGenerateBracket, useTournamentMatches } from "@/hooks/useBracket";
 import { BracketView } from "@/components/tournaments/BracketView";
 import { TournamentShots } from "@/components/tournaments/TournamentShots";
+import { shareBracketImage } from "@/lib/bracketImage";
+import { OpenGameButton } from "@/components/tournaments/OpenGameButton";
+import { PlayerGameIds } from "@/components/tournaments/PlayerGameIds";
 import { ShareButton } from "@/components/shared/ShareButton";
 import { downloadIcs } from "@/lib/ics";
 import { CreateTournamentDialog } from "@/components/tournaments/CreateTournamentDialog";
@@ -341,6 +344,11 @@ export default function TournamentDetailPage({ params }: { params: { id: string 
             text={`🏆 ${tournament.title} — ${tournament.game}${tournament.prize ? ` · Prize: ${tournament.prize}` : ""}. Join me on PlayConnect!`}
           />
           <ShareResultButton tournament={tournament} matches={matches} />
+          {bracketStarted && matches.length > 0 && (
+            <Button type="button" size="sm" variant="outline" onClick={() => shareBracketImage(tournament.title, tournament.game, matches)}>
+              <ImageIcon className="h-3.5 w-3.5" /> Share bracket
+            </Button>
+          )}
           {effectiveStatus(tournament) === "upcoming" && tournament.startsAt && (
             <Button
               type="button"
@@ -417,6 +425,15 @@ export default function TournamentDetailPage({ params }: { params: { id: string 
           </div>
         </Card>
       )}
+
+      {isJoined && <OpenGameButton game={tournament.game} />}
+
+      <PlayerGameIds
+        participantIds={tournament.participantIds ?? []}
+        game={tournament.game}
+        viewerUid={profile?.uid}
+        organizerId={tournament.organizerId}
+      />
 
       {!bracketStarted && !matchesLoading && (
         <div className="rounded-2xl border border-border bg-card p-10 text-center">

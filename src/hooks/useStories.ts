@@ -48,7 +48,8 @@ export function useActiveStories() {
       }
       return Array.from(byAuthor.values());
     },
-    refetchInterval: 180_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 15 * 60_000,
     refetchIntervalInBackground: false,
   });
 }

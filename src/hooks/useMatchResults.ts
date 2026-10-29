@@ -90,16 +90,6 @@ export function useReviewResult(tournamentId: string, game: string, organizerId:
       for (const uid of [match.player1Id, match.player2Id]) {
         if (uid) await createNotification({ toUid: uid, type: "result_approved", fromUser: organizer, tournamentId });
       }
-      // If the winner's next match now has both players, tell them it's ready.
-      if (match.nextMatchId) {
-        const next = await getDoc(doc(db, "tournaments", tournamentId, "matches", match.nextMatchId));
-        const nd = next.data() as TournamentMatch | undefined;
-        if (nd?.player1Id && nd?.player2Id) {
-          for (const uid of [nd.player1Id, nd.player2Id]) {
-            await createNotification({ toUid: uid, type: "match_ready", fromUser: organizer, tournamentId });
-          }
-        }
-      }
     },
   });
 }

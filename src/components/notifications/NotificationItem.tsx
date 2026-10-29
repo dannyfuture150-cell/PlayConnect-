@@ -24,6 +24,7 @@ const COPY: Record<AppNotification["type"], string> = {
   challenge: "challenged you to a match ⚔️",
   mention: "mentioned you 💬",
   coins: "sent you PlayCoins 🪙",
+  bot: "",
 };
 
 const ICON: Record<AppNotification["type"], typeof Heart> = {
@@ -45,6 +46,7 @@ const ICON: Record<AppNotification["type"], typeof Heart> = {
   challenge: Trophy,
   mention: MessageCircle,
   coins: Trophy,
+  bot: MessageCircle,
 };
 
 function linkFor(n: AppNotification): string {
@@ -72,7 +74,7 @@ export function NotificationItem({ notification }: { notification: AppNotificati
         </Avatar>
         <div className="flex-1 text-sm">
           <span className="font-semibold text-foreground">{notification.fromUser.displayName}</span>{" "}
-          <span className="text-steel/70">{notification.type === "advanced" ? `Bracket updated — you moved to the ${notification.roundLabel || "next round"} 🔥` : notification.type === "coins" && notification.amount ? `sent you ${notification.amount} PlayCoins 🪙` : COPY[notification.type]}</span>
+          <span className="text-steel/70">{notification.type === "bot" ? notification.text : notification.type === "advanced" ? `Bracket updated — you moved to the ${notification.roundLabel || "next round"} 🔥` : notification.type === "coins" && notification.amount ? `sent you ${notification.amount} PlayCoins 🪙` : COPY[notification.type]}</span>
           <p className="text-xs text-steel/40">
             {notification.createdAt ? formatDistanceToNow(notification.createdAt.toDate(), { addSuffix: true }) : "just now"}
           </p>

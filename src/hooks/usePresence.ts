@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 
-const BEAT_MS = 60_000; // how often we say "I'm here"
-const ONLINE_WINDOW_MS = 150_000; // seen within 2.5 minutes = online
+const BEAT_MS = 240_000; // how often we say "I'm here"
+const ONLINE_WINDOW_MS = 540_000; // seen within 9 minutes = online
 
 /**
  * Keeps presence/{uid}.lastActive fresh while the app is open and visible.
@@ -15,8 +15,10 @@ const ONLINE_WINDOW_MS = 150_000; // seen within 2.5 minutes = online
 export function usePresenceHeartbeat(uid: string | undefined) {
   useEffect(() => {
     if (!uid) return;
+    let last = 0;
     const beat = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && Date.now() - last > 60_000) {
+        last = Date.now();
         setDoc(doc(db, "presence", uid), { lastActive: serverTimestamp() }, { merge: true }).catch(() => {});
       }
     };

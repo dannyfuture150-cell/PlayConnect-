@@ -3,6 +3,7 @@
 import { Gamepad2 } from "lucide-react";
 import { useChallenges, challengeRecord } from "@/hooks/useChallenges";
 import { computeOrganizerRank, computeRank, withRankOverride } from "@/lib/rank";
+import { connectedGames } from "@/lib/gameAccounts";
 import type { UserProfile } from "@/types";
 
 /** Compact gamer summary on a profile: platform, rank, game IDs, favourite games, results. */
@@ -15,10 +16,11 @@ export function GamerCard({ profile }: { profile: UserProfile }) {
       : computeRank(profile.followersCount, profile.postsCount, profile.tournamentWins ?? 0),
     profile.rankOverride
   );
-  const ids = [
-    profile.efootballId && { label: "eFootball ID", value: profile.efootballId },
-    profile.eaFcId && { label: "EA FC ID", value: profile.eaFcId },
-  ].filter(Boolean) as { label: string; value: string }[];
+  const ids = connectedGames(profile).map((c) => ({
+    label: c.def.label,
+    value: c.id,
+    platform: c.platform,
+  }));
 
   const stat = (label: string, value: string | number) => (
     <div className="flex-1 px-2 py-2.5 text-center">
@@ -51,7 +53,8 @@ export function GamerCard({ profile }: { profile: UserProfile }) {
           )}
           {ids.map((i) => (
             <p key={i.label} className="text-xs text-steel/60">
-              {i.label}: <span className="font-semibold text-foreground">{i.value}</span>
+              {i.label}
+              {i.platform ? ` (${i.platform})` : ""}: <span className="font-semibold text-foreground">{i.value}</span>
             </p>
           ))}
         </div>

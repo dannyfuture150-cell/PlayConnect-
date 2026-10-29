@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { initAdmin } from "@/lib/firebaseAdmin";
 import { sendToUids } from "@/lib/pushServer";
+import { botSay } from "@/lib/botServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,5 +107,33 @@ export async function GET(req: Request) {
     sent = targets.length;
   }
 
-  return NextResponse.json({ ok: true, sent, featured: featured?.id ?? null });
+  // The bot also leaves a message in the chat of players who haven't been around for 2+ days.
+  // At most one per player per week, and never to anyone who turned bot messages off.
+  let botNudged = 0;
+  try {
+    const active2d = await db.collection("presence").where("lastActive", ">", Timestamp.fromMillis(now - 2 * 86400_000)).get();
+    const activeIds = new Set(active2d.docs.map((d) => d.id));
+    const away = targets.filter((id) => !activeIds.has(id)).slice(0, 100);
+    const when = featured ? new Date(featured.startsAt.toMillis()).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }) : "";
+    for (let i = 0; i < away.length; i += 25) {
+      const chunk = away.slice(i, i + 25);
+      const snaps = await db.getAll(...chunk.map((id) => db.collection("users").doc(id)));
+      for (const s of snaps) {
+        const u = s.data() ?? {};
+        if (!s.exists || u.botMessagesOff === true) continue;
+        if ((u.botNudgedAt?.toMillis?.() ?? 0) > now - 7 * 86400_000) continue;
+        const ok = await botSay(db, s.id, featured
+          ? { text: `Hey! It's been a few days. ${featured.title} starts ${when}. Tap to join, or tap Play 1v1 Now on the feed for a quick match. 🎮`, link: `/tournaments/${featured.id}` }
+          : { text: "Hey! It's been a few days. Tap Play 1v1 Now on the feed for a quick match, or check the Tournaments tab to see what's coming up. 🎮", link: "/feed" });
+        if (ok) {
+          await db.collection("users").doc(s.id).update({ botNudgedAt: FieldValue.serverTimestamp() });
+          botNudged++;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[cron/reminders] bot nudge failed:", (e as Error)?.message);
+  }
+
+  return NextResponse.json({ ok: true, sent, botNudged, featured: featured?.id ?? null });
 }

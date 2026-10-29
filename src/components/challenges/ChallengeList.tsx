@@ -13,7 +13,7 @@ import {
 import { threadIdFor } from "@/hooks/useMessages";
 import type { Challenge } from "@/types";
 
-function Row({ c, uid }: { c: Challenge; uid: string }) {
+export function Row({ c, uid }: { c: Challenge; uid: string }) {
   const other = c.challengerId === uid ? c.opponent : c.challenger;
   const mineToAnswer = c.status === "pending" && c.opponentId === uid;
   const [busy, setBusy] = useState(false);

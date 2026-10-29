@@ -23,6 +23,10 @@ export interface UserProfile {
   skillLevel: SkillLevel;
   efootballId?: string;
   eaFcId?: string;
+  mkId?: string; // Mortal Kombat online ID
+  efootballPlatform?: GamingPlatform | "";
+  eaFcPlatform?: GamingPlatform | "";
+  mkPlatform?: GamingPlatform | "";
   discordUsername?: string;
   twitchUrl?: string;
   youtubeUrl?: string;
@@ -53,6 +57,7 @@ export interface UserProfile {
   referredBy?: string | null; // uid of the player who referred them
   referredByUsername?: string | null;
   isAdmin?: boolean;
+  botMessagesOff?: boolean; // the player turned off messages from the PlayConnect Bot
   isBanned?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -153,7 +158,8 @@ export interface Story {
 /** notifications/{uid}/items/{notificationId} */
 export interface AppNotification {
   id: string;
-  type: "like" | "comment" | "follow" | "message" | "tournament_invite" | "community_invite" | "trophy_win" | "result_submitted" | "result_approved" | "result_rejected" | "match_ready" | "spot_open" | "tournament_reminder" | "advanced" | "result_reversed" | "challenge" | "mention" | "coins";
+  type: "like" | "comment" | "follow" | "message" | "tournament_invite" | "community_invite" | "trophy_win" | "result_submitted" | "result_approved" | "result_rejected" | "match_ready" | "spot_open" | "tournament_reminder" | "advanced" | "result_reversed" | "challenge" | "mention" | "coins" | "bot";
+  text?: string; // the message, for type "bot"
   fromUid: string;
   fromUser: PostAuthorSnapshot;
   postId?: string;

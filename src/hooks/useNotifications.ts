@@ -68,7 +68,7 @@ export function useNotifications(uid: string | undefined) {
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification));
     },
     enabled: !!uid,
-    refetchInterval: 30_000, // simple polling until a real-time listener is wired up
+    refetchInterval: 2 * 60_000,
   });
 }
 

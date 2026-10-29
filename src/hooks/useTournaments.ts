@@ -26,7 +26,9 @@ import type { Tournament } from "@/types";
 export function useTournaments(options?: { poll?: boolean }) {
   return useQuery<Tournament[]>({
     queryKey: ["tournaments"],
-    refetchInterval: options?.poll ? 120000 : false,
+    // No background polling: it re-read 100 tournaments per player every 2 minutes and used up the free daily quota.
+    staleTime: 5 * 60_000,
+    refetchInterval: options?.poll ? 15 * 60_000 : false,
     queryFn: async () => {
       // Newest 100 only (so the list doesn't get slower as the app grows),
       // then put them back in soonest-first order for display.

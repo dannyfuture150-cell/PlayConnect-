@@ -9,6 +9,7 @@ import { useLiveAuthor } from "@/hooks/useProfile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { VerifiedBadge } from "@/components/shared/VerifiedBadge";
 import { useAuth } from "@/providers/AuthProvider";
+import { NextMatchCard } from "@/components/tournaments/NextMatchCard";
 import { TournamentRow } from "@/components/tournaments/TournamentRow";
 import { CreateTournamentDialog } from "@/components/tournaments/CreateTournamentDialog";
 import { canonicalGame } from "@/lib/leaderboardGames";
@@ -154,6 +155,7 @@ export default function TournamentsPage() {
       {/* Players: tournaments are grouped under the organiser who runs them */}
       {showDirectory && !isLoading && (
         <>
+          {profile && joinedNow.length > 0 && <NextMatchCard tournaments={joinedNow} uid={profile.uid} />}
           {joinedNow.length > 0 && (
             <div className="flex flex-col gap-2">
               <p className="text-xs font-bold uppercase tracking-wide text-steel/60">You&apos;re playing in</p>

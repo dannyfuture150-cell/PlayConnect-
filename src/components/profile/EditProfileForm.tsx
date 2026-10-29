@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ChipMultiSelect } from "@/components/shared/ChipMultiSelect";
 import { PresetAvatarPicker } from "@/components/shared/PresetAvatarPicker";
+import { GAME_ACCOUNTS, GAME_PLATFORMS } from "@/lib/gameAccounts";
 
 const PLATFORMS = ["PC", "PlayStation", "Xbox", "Mobile", "Switch"] as const;
 
@@ -50,6 +51,10 @@ export function EditProfileForm() {
       favoriteGames: profile?.favoriteGames ?? [],
       efootballId: profile?.efootballId ?? "",
       eaFcId: profile?.eaFcId ?? "",
+      mkId: profile?.mkId ?? "",
+      efootballPlatform: profile?.efootballPlatform ?? "",
+      eaFcPlatform: profile?.eaFcPlatform ?? "",
+      mkPlatform: profile?.mkPlatform ?? "",
       discordUsername: profile?.discordUsername ?? "",
       twitchUrl: profile?.twitchUrl ?? "",
       youtubeUrl: profile?.youtubeUrl ?? "",
@@ -202,15 +207,32 @@ export function EditProfileForm() {
         {errors.favoriteGames && <p className="text-xs text-signal-red">{errors.favoriteGames.message}</p>}
       </div>
 
+      <div className="rounded-2xl border border-border p-4">
+        <p className="font-display text-base font-bold">Connect your games</p>
+        <p className="mt-0.5 text-xs text-steel/60">
+          Add your in-game name for each game you play. Organisers and opponents see it, so they can add you and play your match.
+        </p>
+        <div className="mt-3 flex flex-col gap-4">
+          {GAME_ACCOUNTS.map((g) => (
+            <div key={g.key} className="flex flex-col gap-1.5">
+              <Label htmlFor={g.idField}>{g.label}</Label>
+              <div className="flex gap-2">
+                <select
+                  aria-label={`${g.label} platform`}
+                  {...register(g.platformField)}
+                  className="h-11 w-32 shrink-0 rounded-xl border border-border bg-muted px-2 text-sm text-foreground"
+                >
+                  <option value="">Platform</option>
+                  {GAME_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <Input id={g.idField} placeholder={g.idLabel} autoComplete="off" {...register(g.idField)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="efootballId">eFootball ID</Label>
-          <Input id="efootballId" {...register("efootballId")} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="eaFcId">EA FC ID</Label>
-          <Input id="eaFcId" {...register("eaFcId")} />
-        </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="discordUsername">Discord username</Label>
           <Input id="discordUsername" {...register("discordUsername")} />
