@@ -1,6 +1,6 @@
 import { auth } from "@/lib/firebase/client";
 
-export const QUICK_GAMES = ["eFootball", "EA FC", "Mortal Kombat"] as const;
+export const QUICK_GAMES = ["eFootball", "EA FC", "Mortal Kombat", "Blood Strike"] as const;
 
 export type QuickState = "idle" | "waiting" | "matched" | "expired";
 export interface QuickReply {

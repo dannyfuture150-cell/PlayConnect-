@@ -257,21 +257,134 @@ export const BOT_ANSWERS: BotAnswer[] = [
 ];
 
 export const BOT_GREETING =
-  "Hi, I'm the PlayConnect Bot 🤖. Ask me how PlayConnect works (“how do I join a tournament?”) or for gaming tips (“how do I defend better?”). Or tap a quick question below.";
+  "Hey there! 👋 I'm the PlayConnect Bot 🤖. Ask me how PlayConnect works (“how do I join a tournament?”), for gaming tips (“how do I defend better?”), or just say hi. Or tap a quick question below.";
 
 export const BOT_FALLBACK =
-  "I'm not sure about that one. Try asking in different words, or tap a topic below. If it's something else, ask your tournament organiser or message an admin.";
+  "Hmm, I'm not sure about that one 😅 but I'm learning! Try asking in different words, or ask me about tournaments, PlayCoins, 1v1 matches or gaming tips. For anything else, your tournament organiser or an admin can help.";
 
-const GREETINGS = ["hi", "hello", "hey", "yo", "good morning", "good afternoon", "good evening", "sup"];
-const THANKS = ["thanks", "thank you", "thx", "cheers"];
+const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
+
+/** Friendly small talk: chit-chat that isn't about the app. Each entry has several replies so the bot doesn't repeat itself. */
+const SMALL_TALK: { test: RegExp; replies: string[]; weak?: boolean }[] = [
+  {
+    test: /\b(thanks|thank you|thx|cheers|appreciate it)\b/,
+    replies: ["You're welcome! 🎮 Ask me anything else.", "Anytime! 😊", "No problem at all, that's what I'm here for! 🙌"],
+  },
+  {
+    test: /\b(bye|goodbye|see you|see ya|cya|later|gtg|good night|goodnight|night)\b/,
+    replies: ["See you later! 🎮 Come back for a match soon.", "Bye for now! 👋 Good luck out there.", "Take care! Sleep well if it's night 😴 and come back to play soon."],
+  },
+  {
+    test: /\b(how are you|how r u|how are u|how you doing|how s it going|how is it going|hru|how do you do|you good|you okay)\b/,
+    replies: [
+      "I'm doing great, thanks for asking! 😄 Ready to help. How are you doing?",
+      "Feeling good, always ready for a match 🎮 How about you?",
+      "All good on my side! 🤖 Hope your day is going well. What can I help with?",
+    ],
+  },
+  {
+    test: /\b(sup|wassup|wazzup|whats up|what s up|what is up|whatsup|wsp|howdy)\b/,
+    replies: [
+      "Not much, just hanging out waiting for players to ask me stuff 😄 What's up with you?",
+      "Hey hey! 👋 All good here. Wanna play a quick 1v1, or need some help?",
+      "Yo! 🎮 Just here, ready to help. What's up?",
+    ],
+  },
+  {
+    test: /\b(who are you|what are you|your name|who r u|are you real|are you human|are you a bot|are you a robot|are you ai|you a real person)\b/,
+    replies: [
+      "I'm the PlayConnect Bot 🤖, a friendly helper that lives in the app. I'm not a real person, but I know a lot about PlayConnect and gaming!",
+      "I'm a bot, not a human 😄 I help players with questions about PlayConnect, tournaments and gaming. Ask away!",
+    ],
+  },
+  {
+    test: /\b(who made you|who created you|who built you|who owns you|who is your creator|who developed you)\b/,
+    replies: ["The PlayConnect team built me to help players like you 🎮 I'm still learning new things."],
+  },
+  {
+    test: /\b(what can you do|what do you do|how can you help|can you help|help me|need help|help)\b/,
+    weak: true,
+    replies: [
+      "I can: 🎮 explain how PlayConnect works (tournaments, PlayCoins, 1v1, leagues), give gaming tips, remind you about matches, and chat a little. Try “how do I join a tournament?” or tap a question below.",
+    ],
+  },
+  {
+    test: /\b(what is gaming|what s gaming|whats gaming|what is a game|what is video gaming|define gaming|meaning of gaming)\b/,
+    replies: [
+      "Gaming is playing video games, on a phone, console or PC 🎮 Some people play for fun, some to compete, and some even make a career out of it. That's called esports. On PlayConnect you can compete in tournaments, play quick 1v1 matches and meet other gamers.",
+    ],
+  },
+  {
+    test: /\b(what is esports|what s esports|whats esports|what is e sports|what are esports)\b/,
+    replies: ["Esports is competitive gaming, where players or teams face off in organised tournaments, sometimes for prizes 🏆 PlayConnect is built so you can do exactly that with other players."],
+  },
+  {
+    test: /\b(i am bored|i m bored|im bored|bored|nothing to do)\b/,
+    replies: ["Bored? Let's fix that! 😄 Tap Play 1v1 Now on the feed for an instant match, or check the Tournaments tab for something to join."],
+  },
+  {
+    test: /\b(tell me a joke|joke|make me laugh|say something funny|funny)\b/,
+    replies: [
+      "Why did the gamer bring a ladder? To reach the next level! 😄",
+      "Why don't gamers ever get cold? They always stay near their fans! 😂",
+      "I'd tell you a UDP joke, but you might not get it. 🤓",
+    ],
+  },
+  {
+    test: /\b(i won|i win|we won|just won|won my match|i scored|champion)\b/,
+    replies: ["Congrats! 🏆🔥 Don't forget to submit the score so it counts. GG!", "Let's go! 🎉 Nice one. Make sure the result is submitted. Ready for another?"],
+  },
+  {
+    test: /\b(i lost|i lose|we lost|just lost|lost my match|i got beaten|got smashed|i m sad|im sad|bad loss)\b/,
+    replies: ["Aw, that's tough 😔 but every loss teaches you something. Shake it off, take a short break, and come back stronger. Want some tips? Ask me “how do I defend better?” 💪"],
+  },
+  {
+    test: /\b(i love you|love you|you are cool|you re cool|you are awesome|you re awesome|you are the best|you re the best|you are great|nice bot|good bot|well done)\b/,
+    replies: ["Aww, thank you! 🥰 You're awesome too.", "That means a lot! 😊 Now go win some matches 🎮"],
+  },
+  {
+    test: /\b(you are stupid|you re stupid|stupid bot|useless|you suck|dumb bot|bad bot|you are dumb)\b/,
+    replies: ["Sorry about that 😅 I'm still learning. Try asking in different words and I'll do my best to help."],
+  },
+  {
+    test: /\b(favourite game|favorite game|best game|what game do you like|what do you play|do you play)\b/,
+    replies: ["I'm a bot so I can't hold a controller 😄 but I hear eFootball, EA FC, Mortal Kombat and Blood Strike are big here. What do you play?"],
+  },
+  {
+    test: /\b(good morning|good afternoon|good evening|gm)\b/,
+    replies: ["Good day to you! ☀️ Ready for some games?", "Hello! 😊 Hope your day's going great. What can I do for you?"],
+  },
+  {
+    test: /\b(lol|lmao|haha|hahaha|hehe|😂)\b/,
+    replies: ["😄", "Haha! 😂", "Glad that made you smile! 😊"],
+  },
+  {
+    test: /\b(ok|okay|cool|nice|alright|fine|great|good)\b/,
+    weak: true,
+    replies: ["👍 Anything else I can help with?", "Cool! 😊 Just ask if you need anything."],
+  },
+  {
+    test: /\b(what time|what is the time|what s the time|what day|what is the date|weather)\b/,
+    weak: true,
+    replies: ["I can't see clocks or the weather 😅 but your phone can! I'm best at PlayConnect and gaming questions."],
+  },
+];
+
+const GREETINGS = ["hi", "hello", "hey", "heyy", "yo", "hii", "hiya"];
 
 /** Picks the best answer for what the player typed. Returns null if nothing fits. */
 export function answerFor(input: string): { text: string; link?: BotAnswer["link"] } | null {
   const q = ` ${input.toLowerCase().replace(/[^a-z0-9@\s-]/g, " ").replace(/\s+/g, " ").trim()} `;
   if (q.trim().length === 0) return null;
-  if (THANKS.some((t) => q.includes(` ${t} `) || q.includes(` ${t}`))) return { text: "You're welcome! 🎮 Ask me anything else." };
-  if (GREETINGS.some((g) => q.trim() === g || q.startsWith(` ${g} `))) return { text: BOT_GREETING };
+  const words = q.trim().split(" ");
+  const short = words.length <= 6;
 
+  // a plain greeting
+  if (short && GREETINGS.includes(words[0]) && words.length <= 3) {
+    return { text: pick(["Hey there! 👋 How's it going? Ask me anything about PlayConnect or gaming, or just chat.", "Hi! 😊 Good to see you. What can I help with?", BOT_GREETING]) };
+  }
+
+  // app and gaming questions first, so "how do I join a tournament" never gets treated as chit-chat
   let best: { a: BotAnswer; score: number } | null = null;
   for (const a of BOT_ANSWERS) {
     let score = 0;
@@ -280,5 +393,8 @@ export function answerFor(input: string): { text: string; link?: BotAnswer["link
     }
     if (score > 0 && (!best || score > best.score)) best = { a, score };
   }
+  // short friendly messages ("sup", "how are you", "I lost") get chit-chat; real questions get the app/gaming answer
+  const chat = SMALL_TALK.find((t) => t.test.test(q));
+  if (chat && (!best || (short && !chat.weak))) return { text: pick(chat.replies) };
   return best ? { text: best.a.answer, link: best.a.link } : null;
 }

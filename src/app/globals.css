@@ -145,3 +145,30 @@ html, body { overflow-x: hidden; max-width: 100%; }
   50% { box-shadow: 0 0 26px 6px rgba(139, 92, 246, 0.9), 0 0 56px 16px rgba(236, 72, 153, 0.45); }
 }
 .pc-glow { animation: pcGlow 1.8s ease-in-out infinite; }
+
+/* "Play 1v1 Now" tab: dark card, glowing animated gradient edge, pulsing icon */
+@keyframes pcRing {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes pcIconPulse {
+  0%, 100% { box-shadow: 0 0 10px 1px rgba(236, 72, 153, 0.55); transform: scale(1); }
+  50% { box-shadow: 0 0 22px 5px rgba(139, 92, 246, 0.85); transform: scale(1.06); }
+}
+.pc-1v1-ring {
+  background: linear-gradient(90deg, #7c3aed, #ec4899, #f59e0b, #ec4899, #7c3aed);
+  background-size: 200% 100%;
+  animation: pcRing 3s linear infinite, pcGlow 1.8s ease-in-out infinite;
+}
+.pc-1v1 { background: linear-gradient(135deg, #14081f 0%, #1f0a33 55%, #2a0a2a 100%); }
+.pc-1v1::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120px 60px at 12% 50%, rgba(139, 92, 246, 0.35), transparent 70%);
+  pointer-events: none;
+}
+.pc-1v1-icon { animation: pcIconPulse 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pc-1v1-ring, .pc-1v1-icon { animation: none; }
+}

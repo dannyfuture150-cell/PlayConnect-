@@ -2,17 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Check, Pencil, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/providers/AuthProvider";
+import { useBotName } from "@/hooks/useBotName";
 import { useBotInbox, useMarkBotRead } from "@/hooks/useBotInbox";
 import { answerFor, BOT_FALLBACK, BOT_GREETING } from "@/lib/helpBot";
 
 const QUICK_TOPICS = ["Join a tournament", "Play 1v1 now", "What are PlayCoins?"];
 
+const STORE_KEY = "pc_bot_chat";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Chats with the bot are kept on this phone for 24 hours, then they disappear. */
+function loadChat(): Msg[] {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw) as Msg[];
+    const now = Date.now();
+    return Array.isArray(list) ? list.filter((m) => m && typeof m.at === "number" && now - m.at < DAY_MS) : [];
+  } catch {
+    return [];
+  }
+}
+
 interface Msg {
   id: number;
+  at: number;
   from: "bot" | "me";
   text: string;
   link?: { label: string; href: string };
@@ -20,12 +38,16 @@ interface Msg {
 
 /** A chat with the PlayConnect Bot. Everything happens on the phone: nothing is saved or sent anywhere. */
 export default function BotChatPage() {
-  const [msgs, setMsgs] = useState<Msg[]>([{ id: 0, from: "bot", text: BOT_GREETING }]);
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
   const { profile } = useAuth();
+  const { name: botName, setName: setBotName } = useBotName();
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState("");
   const inbox = useBotInbox(profile?.uid);
   const markRead = useMarkBotRead(profile?.uid);
 
@@ -34,6 +56,23 @@ export default function BotChatPage() {
     if (inbox.data && inbox.data.some((n) => !n.read)) void markRead(inbox.data);
   }, [inbox.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // bring back the last 24 hours of this chat
+  useEffect(() => {
+    const saved = loadChat();
+    nextId.current = saved.reduce((mx, m) => Math.max(mx, m.id), 0) + 1;
+    setMsgs(saved);
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(msgs));
+    } catch {
+      /* storage full or blocked: the chat just won't be remembered */
+    }
+  }, [msgs, loaded]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [msgs, typing]);
@@ -41,12 +80,12 @@ export default function BotChatPage() {
   function ask(question: string) {
     const q = question.trim();
     if (!q || typing) return;
-    setMsgs((m) => [...m, { id: nextId.current++, from: "me", text: q }]);
+    setMsgs((m) => [...m, { id: nextId.current++, at: Date.now(), from: "me", text: q }]);
     setText("");
     setTyping(true);
     const found = answerFor(q);
     setTimeout(() => {
-      setMsgs((m) => [...m, { id: nextId.current++, from: "bot", text: found?.text ?? BOT_FALLBACK, link: found?.link }]);
+      setMsgs((m) => [...m, { id: nextId.current++, at: Date.now(), from: "bot", text: found?.text ?? BOT_FALLBACK, link: found?.link }]);
       setTyping(false);
     }, 500);
   }
@@ -59,7 +98,36 @@ export default function BotChatPage() {
         </Link>
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-gradient text-xl">🤖</span>
         <div>
-          <p className="font-display text-base font-bold">PlayConnect Bot</p>
+          {renaming ? (
+            <form
+              className="flex items-center gap-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setBotName(draftName);
+                setRenaming(false);
+              }}
+            >
+              <Input autoFocus value={draftName} onChange={(e) => setDraftName(e.target.value)} maxLength={24} placeholder="Name your bot" className="h-8 w-40 text-sm" />
+              <button type="submit" aria-label="Save name" className="rounded-full p-1.5 text-emerald-600 hover:bg-muted">
+                <Check className="h-4 w-4" />
+              </button>
+            </form>
+          ) : (
+            <p className="flex items-center gap-1.5 font-display text-base font-bold">
+              {botName}
+              <button
+                type="button"
+                aria-label="Rename bot"
+                onClick={() => {
+                  setDraftName(botName);
+                  setRenaming(true);
+                }}
+                className="rounded-full p-1 text-steel/50 hover:bg-muted"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </p>
+          )}
           <p className="text-xs text-steel/50">Answers common questions. Not a real person.</p>
         </div>
       </div>
@@ -78,6 +146,11 @@ export default function BotChatPage() {
             </div>
           </div>
         ))}
+        <div className="flex justify-start">
+          <div className="max-w-[85%] rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-foreground">
+            <p className="whitespace-pre-wrap">{BOT_GREETING}</p>
+          </div>
+        </div>
         {msgs.map((m) => (
           <div key={m.id} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm ${m.from === "me" ? "bg-brand-gradient text-white" : "bg-muted text-foreground"}`}>

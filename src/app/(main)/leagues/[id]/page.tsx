@@ -14,6 +14,7 @@ import {
   useLeagueMatches,
   useLeagueTeams,
   useRejectLeagueRequest,
+  useSetMatchdayDate,
   useStartLeague,
 } from "@/hooks/useLeagues";
 import { StandingsTable } from "@/components/leagues/StandingsTable";
@@ -24,6 +25,8 @@ import { ShareButton } from "@/components/shared/ShareButton";
 import { shareStandingsImage } from "@/lib/standingsImage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
+const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 export default function LeagueDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -37,6 +40,7 @@ export default function LeagueDetailPage({ params }: { params: { id: string } })
   const rejectRequest = useRejectLeagueRequest(params.id);
   const startLeague = useStartLeague(params.id);
   const deleteLeague = useDeleteLeague();
+  const setMatchdayDate = useSetMatchdayDate(params.id);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -172,6 +176,11 @@ export default function LeagueDetailPage({ params }: { params: { id: string } })
                 {joinLeague.isPending ? "Joining…" : joinButtonLabel()}
               </Button>
             )}
+            {league.started && !myTeam && (
+              <span className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs font-semibold text-steel/60">
+                Closed · league started
+              </span>
+            )}
             {myTeam && !league.started && (
               <span className="rounded-full border border-violet/30 bg-violet/10 px-3 py-1.5 text-xs font-semibold text-violet-glow">
                 You&apos;re in
@@ -226,7 +235,7 @@ export default function LeagueDetailPage({ params }: { params: { id: string } })
 
         {!league.started && (
           <p className="mt-3 text-xs text-steel/40">
-            Once you start the league, every participant plays every other participant twice (home and away) —{" "}
+            Once you start the league it closes to new players (even if it isn't full), and every participant plays every other participant twice (home and away) —{" "}
             {league.maxParticipants * (league.maxParticipants - 1)} matches total, fully scheduled automatically.
           </p>
         )}
@@ -290,7 +299,44 @@ export default function LeagueDetailPage({ params }: { params: { id: string } })
                 .sort(([a], [b]) => a - b)
                 .map(([round, roundMatches]) => (
                   <div key={round} className="flex flex-col gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-steel/40">Matchday {round}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-steel/40">Matchday {round}</p>
+                      {isCreator ? (
+                        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-steel/50">
+                          <label className="flex items-center gap-1">
+                            Start
+                            <input
+                              type="date"
+                              key={`s-${league.matchdayDates?.[String(round)] ?? "none"}`}
+                              defaultValue={league.matchdayDates?.[String(round)] ?? ""}
+                              disabled={setMatchdayDate.isPending}
+                              onChange={(e) => setMatchdayDate.mutate({ round, start: e.target.value, end: league.matchdayEnds?.[String(round)] ?? "" })}
+                              className="rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground"
+                            />
+                          </label>
+                          <label className="flex items-center gap-1">
+                            End
+                            <input
+                              type="date"
+                              key={`e-${league.matchdayEnds?.[String(round)] ?? "none"}`}
+                              defaultValue={league.matchdayEnds?.[String(round)] ?? ""}
+                              min={league.matchdayDates?.[String(round)] ?? undefined}
+                              disabled={setMatchdayDate.isPending || !league.matchdayDates?.[String(round)]}
+                              onChange={(e) => setMatchdayDate.mutate({ round, start: league.matchdayDates?.[String(round)] ?? "", end: e.target.value })}
+                              className="rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground"
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        league.matchdayDates?.[String(round)] && (
+                          <span className="flex items-center gap-1 text-[11px] font-medium text-violet-glow">
+                            <CalendarClock className="h-3 w-3" />
+                            {fmtDay(league.matchdayDates[String(round)])}
+                            {league.matchdayEnds?.[String(round)] && league.matchdayEnds[String(round)] !== league.matchdayDates[String(round)] && ` → ${fmtDay(league.matchdayEnds[String(round)])}`}
+                          </span>
+                        )
+                      )}
+                    </div>
                     {roundMatches?.map((m) => (
                       <LeagueFixtureCard key={m.id} leagueId={params.id} match={m} canReport={isCreator} creatorId={league.creatorId} teams={teams ?? []} results={results} />
                     ))}

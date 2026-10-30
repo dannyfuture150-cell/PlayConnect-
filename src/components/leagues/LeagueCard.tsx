@@ -25,7 +25,7 @@ export function LeagueCard({ league }: { league: League }) {
         </div>
         <div className="text-right text-xs text-steel/50">
           <p>{league.teamsCount}/{league.maxParticipants} joined</p>
-          <p>{league.started ? `${league.matchesCount} matches` : "Not started"}</p>
+          <p>{league.started ? `Closed · ${league.matchesCount} matches` : "Open to join"}</p>
         </div>
       </Card>
     </Link>

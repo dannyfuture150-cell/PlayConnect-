@@ -17,7 +17,7 @@ export const maxDuration = 30;
  *   leave -> leave the waiting room
  */
 
-const GAMES = ["eFootball", "EA FC", "Mortal Kombat"];
+const GAMES = ["eFootball", "EA FC", "Mortal Kombat", "Blood Strike"];
 const MAX_WAIT_MS = 5 * 60_000; // give up after 5 minutes
 const ALIVE_MS = 25_000; // a waiting player must have polled in the last 25s, so we never pair with someone who left
 const RESUME_MS = 45 * 60_000; // a running quick match is resumed for 45 minutes
@@ -157,6 +157,7 @@ export async function POST(req: Request) {
   } catch (err) {
     const e = err as { code?: unknown; message?: string };
     console.error("[quick] failed:", e?.code, e?.message);
-    return NextResponse.json({ ok: false, error: "Couldn't reach the waiting room. Try again." }, { status: 500 });
+    const code = e?.code !== undefined ? ` (${String(e.code)})` : "";
+    return NextResponse.json({ ok: false, error: `Couldn't reach the waiting room${code}. Try again.` }, { status: 500 });
   }
 }

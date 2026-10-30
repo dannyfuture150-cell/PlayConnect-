@@ -1,7 +1,7 @@
 import { auth } from "@/lib/firebase/client";
 
 /** Asks the server to let the bot say something (welcome, or "your match is ready"). Never throws: bot messages are a bonus. */
-export async function callBot(body: { action: "hello" } | { action: "matches"; tournamentId: string }): Promise<{ ok: boolean }> {
+export async function callBot(body: { action: "hello" } | { action: "matches"; tournamentId: string } | { action: "league"; leagueId: string; kind: "started" | "date"; round?: number }): Promise<{ ok: boolean }> {
   try {
     const user = auth.currentUser;
     if (!user) return { ok: false };

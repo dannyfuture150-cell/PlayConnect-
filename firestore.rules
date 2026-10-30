@@ -261,6 +261,8 @@ service cloud.firestore {
         // Joining the league creates your own single-member "team" doc —
         // only ever representing yourself, never anyone else.
         allow create: if isSignedIn() &&
+          // once the organiser starts the league it is closed, even if not full
+          get(/databases/$(database)/documents/leagues/$(leagueId)).data.get('started', false) == false &&
           request.resource.data.memberIds.size() == 1 &&
           (request.resource.data.memberIds[0] == request.auth.uid ||
            // the league organiser approving someone's paid-entry request

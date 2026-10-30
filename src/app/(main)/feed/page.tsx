@@ -6,6 +6,7 @@ import { FeedList } from "@/components/feed/FeedList";
 import { BotHello } from "@/components/feed/BotHello";
 import { PlayButton } from "@/components/feed/PlayButton";
 import { PlayNowButton } from "@/components/play/PlayNowButton";
+import { FeedLeagueStrip } from "@/components/feed/FeedLeagueStrip";
 import { SetupChecklist } from "@/components/feed/SetupChecklist";
 
 export default function FeedPage() {
@@ -17,6 +18,7 @@ export default function FeedPage() {
       <PlayNowButton />
       <PlayButton />
       <SetupChecklist />
+      <FeedLeagueStrip />
       <FeedTournamentHub />
       <LiveNowStrip />
       <FeedList />

@@ -5,6 +5,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -19,6 +20,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import { callBot } from "@/lib/botClient";
 import type { League, LeagueMatch, LeagueTeam, PostAuthorSnapshot } from "@/types";
 
 export function useLeagues() {
@@ -309,14 +311,33 @@ export function useStartLeague(leagueId: string) {
       });
       batch.update(doc(db, "leagues", leagueId), {
         started: true,
+        // closed for good: the league is exactly the players who joined, even if it never filled up
+        maxParticipants: teams.length,
         matchesCount: allFixtures.length,
       });
       await batch.commit();
+      void callBot({ action: "league", leagueId, kind: "started" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["league", leagueId] });
       queryClient.invalidateQueries({ queryKey: ["league-matches", leagueId] });
     },
+  });
+}
+
+/** Organiser sets (or clears) the start and end dates of one matchday; players hear about it from the bot. */
+export function useSetMatchdayDate(leagueId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ round, start, end }: { round: number; start: string; end: string }) => {
+      const finish = start && (!end || end < start) ? start : end;
+      await updateDoc(doc(db, "leagues", leagueId), {
+        [`matchdayDates.${round}`]: start ? start : deleteField(),
+        [`matchdayEnds.${round}`]: start && finish ? finish : deleteField(),
+      });
+      if (start) void callBot({ action: "league", leagueId, kind: "date", round });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["league", leagueId] }),
   });
 }
 

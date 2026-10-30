@@ -20,7 +20,6 @@ import { safeName, uploadFile, validateImageFile } from "@/lib/firebase/storage-
 import { Card } from "@/components/ui/card";
 import { MentionInput } from "@/components/shared/MentionInput";
 import { StickerPicker, StickerView } from "@/components/chat/StickerPicker";
-import { QuickReplies } from "@/components/chat/QuickReplies";
 import { useDraft } from "@/hooks/useDraft";
 import { useStars } from "@/hooks/useStars";
 import { bubbleStyle, wallpaperStyle } from "@/lib/starsCatalog";
@@ -108,26 +107,6 @@ export function GroupChat({ community }: { community: Community }) {
     updateDoc(doc(db, "communities", community.id), { lastChatAt: serverTimestamp(), lastChatBy: profile.uid }).catch(() => undefined);
     // Separate write so it never blocks the marker above (needs the latest Firestore rules).
     updateDoc(doc(db, "communities", community.id), { lastChatText: preview.slice(0, 80), lastChatName: (profile.displayName || "").split(" ")[0] }).catch(() => undefined);
-  }
-
-  async function sendQuick(t: string) {
-    if (!profile || sending) return;
-    setError(null);
-    try {
-      await addDoc(collection(db, "communities", community.id, "chat"), {
-        authorId: profile.uid,
-        author: { uid: profile.uid, username: profile.username, displayName: profile.displayName, photoURL: profile.photoURL ?? null },
-        text: t,
-        mediaUrl: null,
-        mediaType: null,
-        replyTo,
-        createdAt: serverTimestamp(),
-      });
-      bumpChat(t);
-      setReplyTo(null);
-    } catch (e: any) {
-      setError(e?.message?.includes("permission") ? "Couldn't send — publish the latest Firestore rules." : e?.message || "Couldn't send. Try again.");
-    }
   }
 
   async function sendSticker(id: string) {
@@ -297,7 +276,6 @@ export function GroupChat({ community }: { community: Community }) {
               <button type="button" onClick={() => { URL.revokeObjectURL(attachment.preview); setAttachment(null); }} className="absolute -right-1.5 -top-1.5 rounded-full bg-slate-950/70 p-1 text-white"><X className="h-3 w-3" /></button>
             </div>
           )}
-        <QuickReplies disabled={sending} onPick={sendQuick} />
         <div className="relative flex items-end gap-2">
           <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={pick} />
           <button type="button" onClick={() => imageRef.current?.click()} className="shrink-0 rounded-lg p-2 text-steel/50 hover:bg-muted" title="Send a photo"><ImagePlus className="h-4 w-4" /></button>

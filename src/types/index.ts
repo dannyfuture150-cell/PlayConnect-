@@ -24,9 +24,11 @@ export interface UserProfile {
   efootballId?: string;
   eaFcId?: string;
   mkId?: string; // Mortal Kombat online ID
+  bloodStrikeId?: string; // Blood Strike player ID
   efootballPlatform?: GamingPlatform | "";
   eaFcPlatform?: GamingPlatform | "";
   mkPlatform?: GamingPlatform | "";
+  bloodStrikePlatform?: GamingPlatform | "";
   discordUsername?: string;
   twitchUrl?: string;
   youtubeUrl?: string;
@@ -299,7 +301,9 @@ export interface League {
   teamsCount: number; // how many participants have actually joined so far
   matchesCount: number; // total fixtures once the schedule is generated (maxParticipants * (maxParticipants - 1))
   pendingParticipantIds: string[]; // paid-entry join requests awaiting organizer approval
-  started: boolean; // true once the round-robin schedule has been generated
+  started: boolean; // true once the round-robin schedule has been generated (the league is then closed to new joins)
+  matchdayDates?: Record<string, string>; // organiser-chosen START date for each matchday: { "1": "2026-11-05" }
+  matchdayEnds?: Record<string, string>; // organiser-chosen END date for each matchday (the matchday stops being "live" after this day)
   createdAt: Timestamp;
 }
 

@@ -116,23 +116,39 @@ export function PlayNowButton() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          // a quick match that is still running opens straight back into it
-          const running = items.find((c) => (c as Challenge & { quick?: boolean }).quick && (c.status === "accepted" || c.status === "reported"));
-          if (running) {
-            setChallengeId(running.id);
-            setStage("matched");
-          } else if (stage === "matched") {
-            setStage("pick");
-          }
-          setOpen(true);
-        }}
-        className="pc-glow flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-gradient px-4 py-4 text-lg font-extrabold tracking-wide text-white active:scale-[0.99]"
-      >
-        <Swords className="h-6 w-6" /> Play 1v1 Now
-      </button>
+      <div className="pc-1v1-ring rounded-[22px] p-[2px]">
+        <button
+          type="button"
+          onClick={() => {
+            // a quick match that is still running opens straight back into it
+            const running = items.find((c) => (c as Challenge & { quick?: boolean }).quick && (c.status === "accepted" || c.status === "reported"));
+            if (running) {
+              setChallengeId(running.id);
+              setStage("matched");
+            } else if (stage === "matched") {
+              setStage("pick");
+            }
+            setOpen(true);
+          }}
+          className="pc-1v1 relative flex w-full items-center gap-3 overflow-hidden rounded-[20px] px-4 py-3.5 text-left text-white active:scale-[0.99]"
+        >
+          <span className="pc-1v1-icon relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-gradient">
+            <Swords className="h-6 w-6" />
+          </span>
+          <span className="relative min-w-0 flex-1">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-fuchsia-300">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+              Instant match
+            </span>
+            <span className="block font-display text-xl font-extrabold leading-tight tracking-wide">Play 1v1 Now</span>
+            <span className="block truncate text-[11px] text-white/60">{QUICK_GAMES.join(" · ")}</span>
+          </span>
+          <span className="relative shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur">Tap to play →</span>
+        </button>
+      </div>
 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">

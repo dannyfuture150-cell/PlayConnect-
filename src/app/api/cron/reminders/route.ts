@@ -135,5 +135,38 @@ export async function GET(req: Request) {
     console.error("[cron/reminders] bot nudge failed:", (e as Error)?.message);
   }
 
-  return NextResponse.json({ ok: true, sent, botNudged, featured: featured?.id ?? null });
+  // Matchday reminders: tomorrow is a league matchday -> tell the players who still have a fixture that day.
+  let leagueReminded = 0;
+  try {
+    const tomorrow = new Date(now + 86400_000).toISOString().slice(0, 10);
+    const ls = await db.collection("leagues").where("started", "==", true).limit(50).get();
+    for (const ld of ls.docs) {
+      const l: any = ld.data();
+      const dates: Record<string, string> = l.matchdayDates ?? {};
+      const already: string[] = l.botRemindedRounds ?? [];
+      const rounds = Object.keys(dates).filter((r) => dates[r] === tomorrow && !already.includes(r));
+      for (const r of rounds) {
+        await ld.ref.update({ botRemindedRounds: FieldValue.arrayUnion(r) });
+        const [tSnap, mSnap] = await Promise.all([ld.ref.collection("teams").get(), ld.ref.collection("matches").where("round", "==", Number(r)).get()]);
+        const fixtures: any[] = mSnap.docs.map((d) => d.data());
+        for (const td of tSnap.docs) {
+          const f = fixtures.find((x) => !x.played && (x.homeTeamId === td.id || x.awayTeamId === td.id));
+          if (!f) continue;
+          const opp = f.homeTeamId === td.id ? f.awayTeamName : f.homeTeamName;
+          for (const pid of ((td.data() as any).memberIds ?? []) as string[]) {
+            const ok = await botSay(db, pid, {
+              text: `Reminder: ${l.name} Matchday ${r} is tomorrow. You play ${opp}. Good luck! 🎮`,
+              link: `/leagues/${ld.id}`,
+              push: { title: "⚽ Matchday tomorrow", body: `${l.name} · vs ${opp}`, tag: `league-${ld.id}-remind-${r}` },
+            }).catch(() => false);
+            if (ok) leagueReminded++;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[cron/reminders] league reminders failed:", (e as Error)?.message);
+  }
+
+  return NextResponse.json({ ok: true, sent, botNudged, leagueReminded, featured: featured?.id ?? null });
 }
