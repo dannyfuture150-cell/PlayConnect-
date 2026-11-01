@@ -2,14 +2,32 @@
 
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useFeed } from "@/hooks/usePosts";
+import { useAuth } from "@/providers/AuthProvider";
+import type { Post } from "@/types";
 import { PostCard } from "@/components/feed/PostCard";
 import { ExploreInsert, type InsertKind } from "@/components/feed/ExploreInserts";
 import { CardsRow } from "@/components/feed/CardsRow";
 import { GetStartedCard } from "@/components/feed/GetStartedCard";
 
 /** `afterFirst` (live leagues and tournaments) is shown right after the first post, then the rest of the posts follow. */
+const SEEN_KEY = "pc_feed_seen";
+const SEEN_MAX = 300;
+
+function loadSeen(): Set<string> {
+  try {
+    return new Set<string>(JSON.parse(localStorage.getItem(SEEN_KEY) || "[]"));
+  } catch {
+    return new Set<string>();
+  }
+}
+
 export function FeedList({ afterFirst }: { afterFirst?: ReactNode }) {
+  const { profile } = useAuth();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError } = useFeed();
+  // Each visit gets its own random order for the first batch; posts you haven't seen lately come first.
+  const shuffleKeys = useRef<Map<string, number>>(new Map());
+  const seenBefore = useRef<Set<string> | null>(null);
+  const markedSeen = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   // Explore content (people, groups, trending) is dropped between posts in a random order, fixed for this visit.
   const insertOrder = useMemo<InsertKind[]>(() => {
@@ -20,6 +38,36 @@ export function FeedList({ afterFirst }: { afterFirst?: ReactNode }) {
     }
     return ["winners", ...k]; // winners always come first so people see them early
   }, []);
+
+  let orderedFirst: Post[] = data?.pages[0]?.posts ?? [];
+  if (orderedFirst.length > 0) {
+    if (!seenBefore.current) seenBefore.current = loadSeen();
+    const seen = seenBefore.current;
+    const now = Date.now();
+    const keyOf = (p: Post) => {
+      let k = shuffleKeys.current.get(p.id);
+      if (k === undefined) {
+        const mineAndNew = !!profile && p.authorId === profile.uid && now - ((p.createdAt as { toMillis?: () => number } | null)?.toMillis?.() ?? 0) < 10 * 60_000;
+        k = mineAndNew ? -1 : (seen.has(p.id) ? 1 : 0) + Math.random();
+        shuffleKeys.current.set(p.id, k);
+      }
+      return k;
+    };
+    orderedFirst = [...orderedFirst].sort((a, b) => keyOf(a) - keyOf(b));
+  }
+
+  // remember what this visit showed, so the next refresh starts with different posts
+  const firstIds = orderedFirst.slice(0, 10).map((p) => p.id).join(",");
+  useEffect(() => {
+    if (!firstIds || markedSeen.current) return;
+    markedSeen.current = true;
+    try {
+      const all = [...firstIds.split(","), ...Array.from(loadSeen())];
+      localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(new Set(all)).slice(0, SEEN_MAX)));
+    } catch {
+      /* no storage: the feed just isn't remembered */
+    }
+  }, [firstIds]);
 
   useEffect(() => {
     if (!sentinelRef.current) return;
@@ -49,7 +97,7 @@ export function FeedList({ afterFirst }: { afterFirst?: ReactNode }) {
     return <p className="text-sm text-signal-red">Couldn&apos;t load the feed. Check your Firebase config and try again.</p>;
   }
 
-  const allPosts = data?.pages.flatMap((p) => p.posts) ?? [];
+  const allPosts = [...orderedFirst, ...(data?.pages.slice(1).flatMap((p) => p.posts) ?? [])];
   // Posted player cards go in small rows of five: the first after the 3rd post, then another every few posts.
   const cardPosts = allPosts.filter((p) => p.card);
   const cardRows: typeof cardPosts[] = [];

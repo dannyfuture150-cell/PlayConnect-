@@ -31,6 +31,8 @@ import { createNotification } from "@/hooks/useNotifications";
 import type { Post, PostAuthorSnapshot, PlayerCardSnapshot } from "@/types";
 
 const PAGE_SIZE = 10;
+/** The first page is a bigger pool of recent posts so the feed can show a different mix each visit. */
+const FIRST_PAGE_SIZE = 20;
 
 interface FeedPage {
   posts: Post[];
@@ -47,7 +49,7 @@ export function useFeed() {
         collection(db, "posts"),
         orderBy("createdAt", "desc"),
         ...(pageParam ? [startAfter(pageParam as DocumentSnapshot)] : []),
-        limit(PAGE_SIZE)
+        limit(pageParam ? PAGE_SIZE : FIRST_PAGE_SIZE)
       );
       const snap = await getDocs(base);
       return {
@@ -55,7 +57,7 @@ export function useFeed() {
         cursor: snap.docs.length ? snap.docs[snap.docs.length - 1] : null,
       };
     },
-    getNextPageParam: (lastPage) => (lastPage.posts.length === PAGE_SIZE ? lastPage.cursor : undefined),
+    getNextPageParam: (lastPage) => (lastPage.posts.length >= PAGE_SIZE ? lastPage.cursor : undefined),
   });
 }
 
