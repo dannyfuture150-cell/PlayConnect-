@@ -29,14 +29,14 @@ export function useProfileByUsername(username: string) {
  * while it's loading or if the user no longer exists.
  */
 export function useLiveAuthor(uid: string | undefined) {
-  return useQuery<(PostAuthorSnapshot & { verified?: boolean }) | null>({
+  return useQuery<(PostAuthorSnapshot & { verified?: boolean; hubPhotoURL?: string | null }) | null>({
     queryKey: ["live-author", uid],
     queryFn: async () => {
       if (!uid) return null;
       const snap = await getDoc(doc(db, "users", uid));
       if (!snap.exists()) return null;
       const d = snap.data();
-      return { uid, username: d.username, displayName: d.displayName, photoURL: d.photoURL, verified: (d.badges ?? []).includes("⭐ Verified") };
+      return { uid, username: d.username, displayName: d.displayName, photoURL: d.photoURL, verified: (d.badges ?? []).includes("⭐ Verified"), hubPhotoURL: (d.hubPhotoURL as string | undefined) ?? null };
     },
     enabled: !!uid,
     staleTime: 60 * 1000,

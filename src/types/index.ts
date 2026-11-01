@@ -25,6 +25,7 @@ export interface UserProfile {
   eaFcId?: string;
   mkId?: string; // Mortal Kombat online ID
   bloodStrikeId?: string; // Blood Strike player ID
+  hubPhotoURL?: string; // organiser's tournament profile picture, shown on the Tournaments tab
   efootballPlatform?: GamingPlatform | "";
   eaFcPlatform?: GamingPlatform | "";
   mkPlatform?: GamingPlatform | "";

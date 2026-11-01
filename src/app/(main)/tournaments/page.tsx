@@ -12,6 +12,9 @@ import { useAuth } from "@/providers/AuthProvider";
 import { NextMatchCard } from "@/components/tournaments/NextMatchCard";
 import { TournamentRow } from "@/components/tournaments/TournamentRow";
 import { CreateTournamentDialog } from "@/components/tournaments/CreateTournamentDialog";
+import { PlayNowButton } from "@/components/play/PlayNowButton";
+import { gameArt } from "@/lib/gameArt";
+import { HubPictureEditor } from "@/components/tournaments/HubPictureEditor";
 import { canonicalGame } from "@/lib/leaderboardGames";
 import { effectiveStatus } from "@/lib/tournamentStatus";
 import { WinnersStrip } from "@/components/tournaments/WinnersStrip";
@@ -34,27 +37,39 @@ const STEPS = [
   { icon: Medal, title: "Win", text: "Win the final to get the trophy and move up the leaderboard." },
 ];
 
-/** One organiser in the players' list: tap to see only their tournaments. */
-function OrganizerCard({ uid, total, live, upcoming, onOpen }: { uid: string; total: number; live: number; upcoming: number; onOpen: () => void }) {
+/** The game an organiser mostly runs, e.g. "eFootball" (or "eFootball +1" when they run several). */
+function gameLabel(games: Map<string, number>): string {
+  const sorted = Array.from(games.entries()).sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return "Tournaments";
+  return sorted.length > 1 ? `${sorted[0][0]} +${sorted.length - 1}` : sorted[0][0];
+}
+
+/** One organiser in the players' list, laid out like a group: picture, game on top, organiser below. Tap to open their tournaments. */
+function OrganizerCard({ uid, game, total, live, upcoming, onOpen }: { uid: string; game: string; total: number; live: number; upcoming: number; onOpen: () => void }) {
   const { data: org } = useLiveAuthor(uid);
   return (
-    <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left active:scale-[0.99]">
-      <Avatar className="h-12 w-12">
-        <AvatarImage src={org?.photoURL ?? undefined} alt="" />
-        <AvatarFallback>{org?.displayName?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
-      </Avatar>
+    <button type="button" onClick={onOpen} className="flex w-full items-center gap-4 rounded-3xl border border-border bg-card p-4 text-left active:scale-[0.99]">
+      <span className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-brand-gradient">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={org?.hubPhotoURL || gameArt(game, uid)} alt="" loading="lazy" className="h-full w-full object-cover" />
+      </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1 truncate text-sm font-bold text-foreground">
+        <span className="block truncate text-lg font-bold text-foreground">{game}</span>
+        <span className="mt-0.5 flex items-center gap-1 truncate text-base text-steel/60">
           {org?.displayName ?? "Organiser"}
           {org?.verified && <VerifiedBadge size={13} />}
         </span>
-        <span className="block truncate text-xs text-steel/60">
-          {total} tournament{total === 1 ? "" : "s"}
-          {live > 0 ? ` · ${live} live now` : upcoming > 0 ? ` · ${upcoming} upcoming` : ""}
-        </span>
       </span>
-      {live > 0 && <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-400" />}
-      <ArrowRight className="h-4 w-4 shrink-0 text-steel/40" />
+      <span className="flex shrink-0 flex-col items-end gap-0.5 text-xs text-steel/60">
+        {live > 0 ? (
+          <span className="flex items-center gap-1.5 font-semibold text-red-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" /> {live} live
+          </span>
+        ) : upcoming > 0 ? (
+          <span className="font-semibold text-emerald-400">{upcoming} upcoming</span>
+        ) : null}
+        <span>{total} tournament{total === 1 ? "" : "s"}</span>
+      </span>
     </button>
   );
 }
@@ -100,10 +115,12 @@ export default function TournamentsPage() {
 
   // The tournament to point people at: something live, else one they joined, else the next upcoming.
   const organizers = useMemo(() => {
-    const m = new Map<string, { total: number; live: number; upcoming: number }>();
+    const m = new Map<string, { total: number; live: number; upcoming: number; games: Map<string, number> }>();
     for (const t of list) {
-      const e = m.get(t.organizerId) ?? { total: 0, live: 0, upcoming: 0 };
+      const e = m.get(t.organizerId) ?? { total: 0, live: 0, upcoming: 0, games: new Map<string, number>() };
       e.total++;
+      const cg = canonicalGame(t.game);
+      e.games.set(cg, (e.games.get(cg) ?? 0) + 1);
       const st = effectiveStatus(t);
       if (st === "live") e.live++;
       else if (st === "upcoming") e.upcoming++;
@@ -135,6 +152,11 @@ export default function TournamentsPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex items-center justify-between gap-3">
+        <PlayNowButton variant="icon" />
+        <span className="select-none font-wordmark text-[17px] font-normal uppercase leading-none tracking-[0.2em] pl-[0.2em] text-foreground">Tournaments</span>
+        <span className="h-11 w-11 shrink-0" aria-hidden />
+      </div>
       <CompeteSwitch />
       {isOrganizer && (
         <div className="flex items-center justify-between gap-3">
@@ -142,13 +164,28 @@ export default function TournamentsPage() {
           <CreateTournamentDialog />
         </div>
       )}
+      {isOrganizer && (
+        <HubPictureEditor game={list.length ? gameLabel(organizers[0]?.[1].games ?? new Map()) : "Your tournaments"} />
+      )}
 
       {!isOrganizer && orgId && (
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => { setOrgId(null); setTabChoice(null); setGame("all"); }} className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-steel/70">
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={() => { setOrgId(null); setTabChoice(null); setGame("all"); }} className="flex w-fit items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-steel/70">
             <ArrowLeft className="h-3.5 w-3.5" /> All organisers
           </button>
-          <p className="min-w-0 truncate font-display text-base font-bold text-foreground">{orgInfo?.displayName ?? "Organiser"}</p>
+          <div className="flex items-center gap-4 rounded-3xl border border-border bg-card p-4">
+            <span className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-brand-gradient">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={orgInfo?.hubPhotoURL || gameArt(gameLabel(organizers[0]?.[1].games ?? new Map()), orgId)} alt="" className="h-full w-full object-cover" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-lg font-bold text-foreground">{gameLabel(organizers[0]?.[1].games ?? new Map())}</span>
+              <span className="mt-0.5 flex items-center gap-1 truncate text-base text-steel/60">
+                {orgInfo?.displayName ?? "Organiser"}
+                {orgInfo?.verified && <VerifiedBadge size={13} />}
+              </span>
+            </span>
+          </div>
         </div>
       )}
 
@@ -168,7 +205,7 @@ export default function TournamentsPage() {
             <div className="flex flex-col gap-2">
               <p className="text-xs font-bold uppercase tracking-wide text-steel/60">Organisers</p>
               {organizers.map(([uid, c]) => (
-                <OrganizerCard key={uid} uid={uid} total={c.total} live={c.live} upcoming={c.upcoming} onOpen={() => { setOrgId(uid); setTabChoice(null); setGame("all"); }} />
+                <OrganizerCard key={uid} uid={uid} game={gameLabel(c.games)} total={c.total} live={c.live} upcoming={c.upcoming} onOpen={() => { setOrgId(uid); setTabChoice(null); setGame("all"); }} />
               ))}
             </div>
           )}

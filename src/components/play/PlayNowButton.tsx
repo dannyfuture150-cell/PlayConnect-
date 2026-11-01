@@ -21,7 +21,7 @@ const GAME_KEY = "pc_quick_game";
 type Stage = "pick" | "searching" | "matched" | "expired";
 
 /** The glowing "Play 1v1 Now" button on the feed, and the waiting room it opens. */
-export function PlayNowButton() {
+export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" }) {
   const { profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<Stage>("pick");
@@ -116,6 +116,29 @@ export function PlayNowButton() {
 
   return (
     <>
+      {variant === "icon" ? (
+        <button
+          type="button"
+          aria-label="Play 1v1 now"
+          onClick={() => {
+            // a quick match that is still running opens straight back into it
+            const running = items.find((c) => (c as Challenge & { quick?: boolean }).quick && (c.status === "accepted" || c.status === "reported"));
+            if (running) {
+              setChallengeId(running.id);
+              setStage("matched");
+            } else if (stage === "matched") {
+              setStage("pick");
+            }
+            setOpen(true);
+          }}
+          className="pc-1v1-ring flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-full p-[2px] active:scale-95"
+        >
+          <span className="pc-1v1 flex h-full w-full flex-col items-center justify-center rounded-full text-white">
+            <Swords className="h-4 w-4" />
+            <span className="text-[9px] font-extrabold leading-none">1v1</span>
+          </span>
+        </button>
+      ) : (
       <div className="pc-1v1-ring rounded-[22px] p-[2px]">
         <button
           type="button"
@@ -149,6 +172,7 @@ export function PlayNowButton() {
           <span className="relative shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur">Tap to play →</span>
         </button>
       </div>
+      )}
 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">

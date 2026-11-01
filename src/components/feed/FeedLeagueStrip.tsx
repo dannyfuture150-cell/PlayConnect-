@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, ChevronRight, Layers } from "lucide-react";
+import { CalendarClock, ChevronRight, Layers, Users } from "lucide-react";
 import { LiveDot } from "@/components/shared/LiveDot";
 import { useLeagues } from "@/hooks/useLeagues";
 
@@ -36,9 +36,11 @@ export function FeedLeagueStrip() {
     }
   }
   days.sort((a, b) => (a.date === b.date ? a.round - b.round : a.date < b.date ? -1 : 1));
+  // leagues still open for people to join (newest first; the list is already newest first)
+  const open = (leagues ?? []).filter((l) => !l.started && (l.teamsCount ?? 0) < l.maxParticipants).slice(0, 2);
   const live = days.filter((d) => d.date <= today && d.end >= today);
   const next = days.find((d) => d.date > today);
-  if (!live.length && !next) return null;
+  if (!live.length && !next && !open.length) return null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -70,6 +72,27 @@ export function FeedLeagueStrip() {
           <ChevronRight className="h-4 w-4 text-steel/50" />
         </Link>
       )}
+      {open.map((l) => (
+        <Link key={l.id} href={`/leagues/${l.id}`} className="flex items-center gap-3 rounded-2xl border border-violet/30 bg-violet/10 p-3.5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white">
+            <Layers className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-violet-glow">League open · {l.game}</span>
+            <span className="block truncate text-sm font-bold text-foreground">{l.name}</span>
+            <span className="flex items-center gap-2 text-xs text-steel/60">
+              <Users className="h-3 w-3" />
+              {l.teamsCount ?? 0}/{l.maxParticipants} joined
+              {l.entryType === "paid" ? ` · Entry ${l.entryFee ?? "fee"}` : " · Free entry"}
+              {l.prize ? ` · 🏆 ${l.prize}` : ""}
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-brand-gradient px-3 py-1.5 text-xs font-semibold text-white">Join</span>
+        </Link>
+      ))}
+      <Link href="/leagues" className="text-center text-xs font-semibold text-violet-glow">
+        See all leagues →
+      </Link>
     </div>
   );
 }
