@@ -95,6 +95,24 @@
     --ring: 152 64% 46%;
   }
 
+  /* Accent: deep pink */
+  [data-accent="pink"] {
+    --violet: 328 100% 47%;
+    --violet-deep: 331 90% 38%;
+    --violet-glow: 328 100% 44%;
+    --cyan: 340 95% 58%;
+    --cyan-deep: 336 85% 48%;
+    --ring: 328 100% 47%;
+  }
+  .dark[data-accent="pink"] {
+    --violet: 328 100% 54%;
+    --violet-deep: 328 90% 46%;
+    --violet-glow: 328 100% 70%;
+    --cyan: 340 100% 68%;
+    --cyan-deep: 335 90% 56%;
+    --ring: 328 100% 54%;
+  }
+
   * {
     @apply border-border;
   }

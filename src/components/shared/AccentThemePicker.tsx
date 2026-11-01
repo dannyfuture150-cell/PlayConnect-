@@ -8,6 +8,7 @@ const OPTIONS: { value: AccentTheme; label: string; swatch: string }[] = [
   { value: "default", label: "Default (violet)", swatch: "linear-gradient(90deg,#9333EA,#F472B6)" },
   { value: "blue", label: "Blue", swatch: "linear-gradient(90deg,#1D4ED8,#38BDF8)" },
   { value: "green", label: "Green", swatch: "linear-gradient(90deg,#15803D,#14B8A6)" },
+  { value: "pink", label: "Deep pink", swatch: "linear-gradient(90deg,#C2185B,#FF1493,#FF5FA2)" },
 ];
 
 export function AccentThemePicker() {

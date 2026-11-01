@@ -2,6 +2,7 @@
 
 import { Framed } from "@/components/stars/Framed";
 import { PlayerName } from "@/components/stars/PlayerName";
+import { LiveAvatarImage } from "@/components/shared/LiveAvatar";
 import { StoryRing } from "@/components/shared/StoryRing";
 import { useState } from "react";
 import Link from "next/link";
@@ -21,7 +22,7 @@ import { useBotInbox } from "@/hooks/useBotInbox";
 import { useBotName } from "@/hooks/useBotName";
 import { usePresence } from "@/hooks/usePresence";
 import { listTime } from "@/lib/chatTime";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 /** Green dot on an avatar while that person is online. */
 function OnlineDot({ uid }: { uid: string | undefined }) {
@@ -231,7 +232,7 @@ export default function MessagesPage() {
               >
                 <Framed uid={otherUid}><StoryRing uid={otherUid}>
                   <Avatar className="h-12 w-12">
-                    <AvatarImage src={other.photoURL ?? undefined} alt={other.displayName} />
+                    <LiveAvatarImage uid={otherUid} src={other.photoURL} alt={other.displayName} />
                     <AvatarFallback>{other.displayName[0]?.toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </StoryRing></Framed>

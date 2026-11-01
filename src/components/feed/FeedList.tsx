@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useFeed } from "@/hooks/usePosts";
 import { PostCard } from "@/components/feed/PostCard";
 import { ExploreInsert, type InsertKind } from "@/components/feed/ExploreInserts";
 import { CardsRow } from "@/components/feed/CardsRow";
 import { GetStartedCard } from "@/components/feed/GetStartedCard";
 
-export function FeedList() {
+/** `afterFirst` (live leagues and tournaments) is shown right after the first post, then the rest of the posts follow. */
+export function FeedList({ afterFirst }: { afterFirst?: ReactNode }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError } = useFeed();
   const sentinelRef = useRef<HTMLDivElement>(null);
   // Explore content (people, groups, trending) is dropped between posts in a random order, fixed for this visit.
@@ -61,6 +62,7 @@ export function FeedList() {
   if (allPosts.length === 0) {
     return (
       <div className="flex flex-col gap-4">
+        {afterFirst}
         <GetStartedCard />
         <div className="rounded-2xl border border-border bg-card p-10 text-center">
           <p className="text-sm text-steel/50">No posts yet. Be the first to drop a play.</p>
@@ -76,6 +78,7 @@ export function FeedList() {
         return (
           <div key={post.id} className="flex flex-col">
             <PostCard post={post} />
+            {i === 0 && afterFirst && <div className="flex flex-col gap-5 border-b border-border px-4 py-4 empty:hidden md:px-3">{afterFirst}</div>}
             {i >= CARD_FIRST && (i - CARD_FIRST) % CARD_EVERY === 0 && cardRows[(i - CARD_FIRST) / CARD_EVERY] && (
               <CardsRow posts={cardRows[(i - CARD_FIRST) / CARD_EVERY]} />
             )}
@@ -84,6 +87,7 @@ export function FeedList() {
           </div>
         );
       })}
+      {posts.length === 0 && afterFirst && <div className="flex flex-col gap-5 px-4 py-4 md:px-3">{afterFirst}</div>}
       {posts.length <= CARD_FIRST && cardRows[0] && <CardsRow posts={cardRows[0]} />}
       <div ref={sentinelRef} className="h-8" />
       {isFetchingNextPage && <p className="text-center text-xs text-steel/40">Loading more…</p>}

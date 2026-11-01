@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StoryRing } from "@/components/shared/StoryRing";
 import { Framed } from "@/components/stars/Framed";
 import { PlayerName } from "@/components/stars/PlayerName";
@@ -18,6 +18,7 @@ import { Linkify } from "@/components/shared/Linkify";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { safeName, uploadFile, validateImageFile } from "@/lib/firebase/storage-helpers";
 import { Card } from "@/components/ui/card";
+import { LiveAvatarImage } from "@/components/shared/LiveAvatar";
 import { MentionInput } from "@/components/shared/MentionInput";
 import { StickerPicker, StickerView } from "@/components/chat/StickerPicker";
 import { useDraft } from "@/hooks/useDraft";
@@ -209,7 +210,7 @@ export function GroupChat({ community }: { community: Community }) {
                   <Link href={`/profile/${m.author?.username ?? ""}`} className="self-end">
                     <Framed uid={m.authorId} thin><StoryRing uid={m.authorId}>
                       <Avatar className="h-7 w-7">
-                        <AvatarImage src={m.author?.photoURL ?? undefined} alt={m.author?.displayName} />
+                        <LiveAvatarImage uid={m.authorId} src={m.author?.photoURL} alt={m.author?.displayName} />
                         <AvatarFallback className="text-[10px]">{m.author?.displayName?.[0]?.toUpperCase()}</AvatarFallback>
                       </Avatar>
                     </StoryRing></Framed>

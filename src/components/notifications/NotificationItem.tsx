@@ -1,8 +1,9 @@
+import { LiveAvatarImage, LiveName } from "@/components/shared/LiveAvatar";
 import Link from "next/link";
 import { Heart, MessageCircle, UserPlus, Trophy, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { AppNotification } from "@/types";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 const COPY: Record<AppNotification["type"], string> = {
@@ -69,11 +70,11 @@ export function NotificationItem({ notification }: { notification: AppNotificati
     <Link href={linkFor(notification)}>
       <div className={cn("flex items-center gap-3 -mx-4 rounded-none border-b border-border/60 px-4 py-3 md:mx-0 md:rounded-xl md:border-0 md:p-3 transition-colors hover:bg-muted", !notification.read && "bg-violet/5")}>
         <Avatar>
-          <AvatarImage src={notification.fromUser.photoURL ?? undefined} alt={notification.fromUser.displayName} />
+          <LiveAvatarImage uid={notification.fromUser.uid} src={notification.fromUser.photoURL} alt={notification.fromUser.displayName} />
           <AvatarFallback>{notification.fromUser.displayName[0]?.toUpperCase()}</AvatarFallback>
         </Avatar>
         <div className="flex-1 text-sm">
-          <span className="font-semibold text-foreground">{notification.fromUser.displayName}</span>{" "}
+          <span className="font-semibold text-foreground"><LiveName uid={notification.fromUser.uid} name={notification.fromUser.displayName} /></span>{" "}
           <span className="text-steel/70">{notification.type === "bot" ? notification.text : notification.type === "advanced" ? `Bracket updated — you moved to the ${notification.roundLabel || "next round"} 🔥` : notification.type === "coins" && notification.amount ? `sent you ${notification.amount} PlayCoins 🪙` : COPY[notification.type]}</span>
           <p className="text-xs text-steel/40">
             {notification.createdAt ? formatDistanceToNow(notification.createdAt.toDate(), { addSuffix: true }) : "just now"}

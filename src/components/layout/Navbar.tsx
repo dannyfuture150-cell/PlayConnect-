@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Coins, Search, LogOut, Bell, MessageCircle, Award, Radio, ShieldCheck, Download, Share2, Heart } from "lucide-react";
+import { PlayNowButton } from "@/components/play/PlayNowButton";
 import { FollowListDialog } from "@/components/profile/FollowListDialog";
 import { useStars } from "@/hooks/useStars";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
@@ -25,6 +26,10 @@ export function Navbar() {
   // On phones the + and the name show on the Feed tab only; other tabs just show your profile.
   const onFeed = pathname === "/feed" || pathname.startsWith("/feed/");
   const onSearch = pathname.startsWith("/search");
+  // The Tournaments and Leagues tabs: 1v1 on the left, the tab name in the middle, your profile on the right.
+  const onTournaments = /^\/tournaments\/?$/.test(pathname);
+  const onLeagues = /^\/leagues\/?$/.test(pathname);
+  const onCompete = onTournaments || onLeagues;
   const unreadThreads = useUnreadThreadCount(profile?.uid);
   const unreadNotifications = useUnreadNotificationCount(profile?.uid);
   const { installed } = useInstallPrompt();
@@ -57,8 +62,13 @@ export function Navbar() {
           </FollowListDialog>
         </div>
       )}
-      <span className={`pointer-events-none ${onFeed || onSearch ? "" : "hidden md:block"} absolute left-1/2 -translate-x-1/2 select-none md:static md:translate-x-0 font-wordmark text-[17px] font-normal uppercase leading-none tracking-[0.2em] pl-[0.2em]`} aria-label="PlayConnect">
-        <span className="text-chrome-foreground">PlayConnect</span>
+      {onCompete && profile && (
+        <div className="md:hidden">
+          <PlayNowButton variant="icon" />
+        </div>
+      )}
+      <span className={`pointer-events-none ${onFeed || onSearch || onCompete ? "" : "hidden md:block"} absolute left-1/2 -translate-x-1/2 select-none md:static md:translate-x-0 font-wordmark text-[17px] font-normal uppercase leading-none tracking-[0.2em] pl-[0.2em]`} aria-label={onCompete ? (onLeagues ? "Leagues" : "Tournaments") : "PlayConnect"}>
+        <span className="text-chrome-foreground">{onCompete ? (onLeagues ? "Leagues" : "Tournaments") : "PlayConnect"}</span>
       </span>
 
       <form onSubmit={handleSearchSubmit} className="hidden max-w-md flex-1 items-center gap-2 px-8 md:flex">

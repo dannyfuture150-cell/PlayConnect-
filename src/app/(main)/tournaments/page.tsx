@@ -12,7 +12,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import { NextMatchCard } from "@/components/tournaments/NextMatchCard";
 import { TournamentRow } from "@/components/tournaments/TournamentRow";
 import { CreateTournamentDialog } from "@/components/tournaments/CreateTournamentDialog";
-import { PlayNowButton } from "@/components/play/PlayNowButton";
 import { gameArt } from "@/lib/gameArt";
 import { HubPictureEditor } from "@/components/tournaments/HubPictureEditor";
 import { canonicalGame } from "@/lib/leaderboardGames";
@@ -54,11 +53,11 @@ function OrganizerCard({ uid, game, total, live, upcoming, onOpen }: { uid: stri
         <img src={org?.hubPhotoURL || gameArt(game, uid)} alt="" loading="lazy" className="h-full w-full object-cover" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-lg font-bold text-foreground">{game}</span>
-        <span className="mt-0.5 flex items-center gap-1 truncate text-base text-steel/60">
+        <span className="flex items-center gap-1 truncate text-lg font-bold text-foreground">
           {org?.displayName ?? "Organiser"}
-          {org?.verified && <VerifiedBadge size={13} />}
+          {org?.verified && <VerifiedBadge size={14} />}
         </span>
+        <span className="mt-0.5 block truncate text-base text-steel/60">{game}</span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-0.5 text-xs text-steel/60">
         {live > 0 ? (
@@ -152,11 +151,6 @@ export default function TournamentsPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        <PlayNowButton variant="icon" />
-        <span className="select-none font-wordmark text-[17px] font-normal uppercase leading-none tracking-[0.2em] pl-[0.2em] text-foreground">Tournaments</span>
-        <span className="h-11 w-11 shrink-0" aria-hidden />
-      </div>
       <CompeteSwitch />
       {isOrganizer && (
         <div className="flex items-center justify-between gap-3">
@@ -179,11 +173,11 @@ export default function TournamentsPage() {
               <img src={orgInfo?.hubPhotoURL || gameArt(gameLabel(organizers[0]?.[1].games ?? new Map()), orgId)} alt="" className="h-full w-full object-cover" />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-lg font-bold text-foreground">{gameLabel(organizers[0]?.[1].games ?? new Map())}</span>
-              <span className="mt-0.5 flex items-center gap-1 truncate text-base text-steel/60">
+              <span className="flex items-center gap-1 truncate text-lg font-bold text-foreground">
                 {orgInfo?.displayName ?? "Organiser"}
-                {orgInfo?.verified && <VerifiedBadge size={13} />}
+                {orgInfo?.verified && <VerifiedBadge size={14} />}
               </span>
+              <span className="mt-0.5 block truncate text-base text-steel/60">{gameLabel(organizers[0]?.[1].games ?? new Map())}</span>
             </span>
           </div>
         </div>
@@ -193,14 +187,6 @@ export default function TournamentsPage() {
       {showDirectory && !isLoading && (
         <>
           {profile && joinedNow.length > 0 && <NextMatchCard tournaments={joinedNow} uid={profile.uid} />}
-          {joinedNow.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-steel/60">You&apos;re playing in</p>
-              {joinedNow.map((t) => (
-                <TournamentRow key={t.id} tournament={t} />
-              ))}
-            </div>
-          )}
           {organizers.length > 0 && (
             <div className="flex flex-col gap-2">
               <p className="text-xs font-bold uppercase tracking-wide text-steel/60">Organisers</p>

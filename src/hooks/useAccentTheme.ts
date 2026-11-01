@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-export type AccentTheme = "default" | "blue" | "green";
-const ACCENTS: AccentTheme[] = ["default", "blue", "green"];
+export type AccentTheme = "default" | "blue" | "green" | "pink";
+const ACCENTS: AccentTheme[] = ["default", "blue", "green", "pink"];
 
 const STORAGE_KEY = "playconnect-accent";
 

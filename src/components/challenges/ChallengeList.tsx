@@ -1,9 +1,10 @@
 "use client";
 
+import { LiveAvatarImage, LiveName } from "@/components/shared/LiveAvatar";
 import { useState } from "react";
 import Link from "next/link";
 import { Swords } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -37,12 +38,12 @@ export function Row({ c, uid }: { c: Challenge; uid: string }) {
       <div className="flex items-center gap-3">
         <Link href={`/profile/${other.username}`}>
           <Avatar className="h-10 w-10">
-            <AvatarImage src={other.photoURL ?? undefined} alt={other.displayName} />
+            <LiveAvatarImage uid={other.uid} src={other.photoURL} alt={other.displayName} />
             <AvatarFallback>{other.displayName[0]?.toUpperCase()}</AvatarFallback>
           </Avatar>
         </Link>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{other.displayName}</p>
+          <p className="truncate text-sm font-semibold"><LiveName uid={other.uid} name={other.displayName} /></p>
           <p className="truncate text-xs text-steel/60">
             {c.game} · {c.bestOf === 1 ? "Single match" : `Best of ${c.bestOf}`}
           </p>

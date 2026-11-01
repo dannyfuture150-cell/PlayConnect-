@@ -16,10 +16,15 @@ export default function FeedPage() {
       <BotHello />
       <PlayButton />
       <SetupChecklist />
-      <FeedLeagueStrip />
-      <FeedTournamentHub />
-      <LiveNowStrip />
-      <FeedList />
+      <FeedList
+        afterFirst={
+          <>
+            <FeedLeagueStrip />
+            <FeedTournamentHub />
+            <LiveNowStrip />
+          </>
+        }
+      />
     </div>
   );
 }

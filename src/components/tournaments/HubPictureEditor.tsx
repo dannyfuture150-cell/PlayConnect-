@@ -53,8 +53,8 @@ export function HubPictureEditor({ game }: { game: string }) {
         </span>
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-lg font-bold text-foreground">{game}</p>
-        <p className="mt-0.5 truncate text-base text-steel/60">{profile.displayName}</p>
+        <p className="truncate text-lg font-bold text-foreground">{profile.displayName}</p>
+        <p className="mt-0.5 truncate text-base text-steel/60">{game}</p>
         <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="mt-1 text-xs font-semibold text-violet-glow">
           {busy ? "Saving…" : me?.hubPhotoURL ? "Change tournament picture" : "Add tournament picture"}
         </button>

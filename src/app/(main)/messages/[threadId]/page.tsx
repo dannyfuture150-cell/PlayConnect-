@@ -18,8 +18,9 @@ import { clockTime, dayLabel, lastSeenLabel } from "@/lib/chatTime";
 import { Linkify } from "@/components/shared/Linkify";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { videoPoster, validateImageFile, validateVideoFile } from "@/lib/firebase/storage-helpers";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { LiveAvatarImage } from "@/components/shared/LiveAvatar";
 import { MentionInput } from "@/components/shared/MentionInput";
 import { useDraft } from "@/hooks/useDraft";
 import { useStars } from "@/hooks/useStars";
@@ -228,7 +229,7 @@ export default function ChatPage({ params }: { params: { threadId: string } }) {
         </Link>
         <Link href={`/profile/${other.username}`} className="relative">
           <Framed uid={other.uid} thin><StoryRing uid={other.uid}><Avatar>
-            <AvatarImage src={other.photoURL ?? undefined} alt={other.displayName} />
+            <LiveAvatarImage uid={other.uid} src={other.photoURL} alt={other.displayName} />
             <AvatarFallback>{other.displayName[0]?.toUpperCase()}</AvatarFallback>
           </Avatar></StoryRing></Framed>
           {online && <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-emerald-500" />}

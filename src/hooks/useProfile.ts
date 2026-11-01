@@ -39,7 +39,7 @@ export function useLiveAuthor(uid: string | undefined) {
       return { uid, username: d.username, displayName: d.displayName, photoURL: d.photoURL, verified: (d.badges ?? []).includes("⭐ Verified"), hubPhotoURL: (d.hubPhotoURL as string | undefined) ?? null };
     },
     enabled: !!uid,
-    staleTime: 60 * 1000,
+    staleTime: 3 * 60 * 1000,
   });
 }
 

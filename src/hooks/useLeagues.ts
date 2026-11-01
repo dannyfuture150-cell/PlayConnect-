@@ -204,6 +204,8 @@ export function useJoinLeague(leagueId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["league-teams", leagueId] });
       queryClient.invalidateQueries({ queryKey: ["league", leagueId] });
+      queryClient.invalidateQueries({ queryKey: ["league-joined", leagueId] });
+      queryClient.invalidateQueries({ queryKey: ["leagues"] });
     },
   });
 }
