@@ -105,6 +105,9 @@ function Reel({
   );
 }
 
+/** Where each reel session was scrolled to, so leaving and coming back keeps your place. */
+const reelScroll = new Map<string, number>();
+
 export default function WatchPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [skipFirst] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("next") === "1");
@@ -113,6 +116,7 @@ export default function WatchPage({ params }: { params: { id: string } }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsFor, setCommentsFor] = useState<Post | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const restoredReel = useRef(false);
 
   const startQ = useQuery<Post | null>({
     queryKey: ["post", params.id],
@@ -130,6 +134,15 @@ export default function WatchPage({ params }: { params: { id: string } }) {
     const start = !skipFirst && startQ.data && startQ.data.mediaType === "video" ? [startQ.data] : [];
     return [...start, ...all];
   }, [feed.data, startQ.data, params.id, skipFirst]);
+
+  // Come back to the reel you were on if you left and returned (kept until the page is refreshed).
+  useEffect(() => {
+    const root = scroller.current;
+    const saved = reelScroll.get(params.id);
+    if (!root || restoredReel.current || !saved || videos.length < 2) return;
+    restoredReel.current = true;
+    root.scrollTop = saved;
+  }, [videos.length, params.id]);
 
   // Which reel is on screen?
   useEffect(() => {
@@ -163,7 +176,7 @@ export default function WatchPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="fixed inset-0 z-[60] bg-black">
-      <div ref={scroller} className="h-full w-full snap-y snap-mandatory overflow-y-scroll overscroll-contain">
+      <div ref={scroller} onScroll={(e) => reelScroll.set(params.id, e.currentTarget.scrollTop)} className="h-full w-full snap-y snap-mandatory overflow-y-scroll overscroll-contain">
         {videos.map((p, i) => (
           <div key={p.id} data-reel-wrap data-index={i} className="h-[100dvh] w-full snap-start">
             <Reel

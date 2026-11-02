@@ -10,6 +10,7 @@ import { LevelUpCelebration } from "@/components/shared/LevelUpCelebration";
 import { MainFrame } from "@/components/layout/MainFrame";
 import { SwipeTabs } from "@/components/layout/SwipeTabs";
 import { RightRail } from "@/components/layout/RightRail";
+import { ScrollMemory } from "@/components/layout/ScrollMemory";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -25,6 +26,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </div>
           </MainFrame>
         </div>
+        <ScrollMemory />
         <MobileNav />
         <TrophyCelebration />
         <LevelUpCelebration />

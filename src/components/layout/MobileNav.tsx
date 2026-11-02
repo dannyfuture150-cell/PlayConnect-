@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Home, Search, Trophy, MessageCircle, ShoppingBag } from "lucide-react";
 import { hidesTabs } from "@/lib/navVisibility";
 import { cn } from "@/lib/utils";
+import { tabTarget } from "@/lib/tabMemory";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUnreadThreadCount } from "@/hooks/useMessages";
 import { useCommunityUnreadTotal } from "@/hooks/useCommunities";
@@ -42,7 +43,7 @@ export function MobileNav() {
         return (
           <Link
             key={href}
-            href={href}
+            href={tabTarget(href, active)}
             className={cn(
               "flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[10.5px] font-medium transition-colors",
               active ? "text-chrome-foreground" : "text-chrome-foreground/45"

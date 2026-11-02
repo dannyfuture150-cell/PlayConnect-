@@ -2,6 +2,9 @@
 
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 
+// Where each video was up to, so coming back to it (after another tab) continues instead of restarting.
+const resumeAt = new Map<string, number>();
+
 // Only one video may play at a time across the whole app.
 let currentlyPlaying: HTMLVideoElement | null = null;
 
@@ -86,6 +89,19 @@ export const RetryVideo = forwardRef<HTMLVideoElement, React.VideoHTMLAttributes
       className={className}
       onError={onError}
       {...rest}
+      onLoadedMetadata={(e) => {
+        const el = e.currentTarget;
+        const t = resumeAt.get(src);
+        if (t && t > 1 && (!isFinite(el.duration) || t < el.duration - 1)) {
+          try { el.currentTime = t; } catch { /* not seekable yet */ }
+        }
+        rest.onLoadedMetadata?.(e);
+      }}
+      onTimeUpdate={(e) => {
+        const el = e.currentTarget;
+        if (el.currentTime > 0 || !resumeAt.has(src)) resumeAt.set(src, el.currentTime);
+        rest.onTimeUpdate?.(e);
+      }}
       onPlay={(e) => {
         // Starting this one stops any other video that is still playing.
         const el = e.currentTarget;
@@ -98,6 +114,7 @@ export const RetryVideo = forwardRef<HTMLVideoElement, React.VideoHTMLAttributes
         onPause?.(e);
       }}
       onEnded={(e) => {
+        resumeAt.delete(src);
         if (currentlyPlaying === e.currentTarget) currentlyPlaying = null;
         onEnded?.(e);
       }}
