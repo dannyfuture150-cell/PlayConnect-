@@ -21,35 +21,54 @@ function loadSeen(): Set<string> {
   }
 }
 
+/**
+ * The feed's random order lives here, outside the component, so it survives moving to another tab and back.
+ * It only starts over when the page is refreshed or someone signs in as a different account.
+ */
+const session: { uid: string | null; keys: Map<string, number>; seen: Set<string> | null; marked: boolean; inserts: InsertKind[] | null } = {
+  uid: null,
+  keys: new Map(),
+  seen: null,
+  marked: false,
+  inserts: null,
+};
+
 export function FeedList({ afterFirst }: { afterFirst?: ReactNode }) {
   const { profile } = useAuth();
+  if (profile?.uid && session.uid !== profile.uid) {
+    session.uid = profile.uid;
+    session.keys = new Map();
+    session.seen = null;
+    session.marked = false;
+    session.inserts = null;
+  }
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError } = useFeed();
   // Each visit gets its own random order for the first batch; posts you haven't seen lately come first.
-  const shuffleKeys = useRef<Map<string, number>>(new Map());
-  const seenBefore = useRef<Set<string> | null>(null);
-  const markedSeen = useRef(false);
+
   const sentinelRef = useRef<HTMLDivElement>(null);
   // Explore content (people, groups, trending) is dropped between posts in a random order, fixed for this visit.
   const insertOrder = useMemo<InsertKind[]>(() => {
+    if (session.inserts) return session.inserts;
     const k: Exclude<InsertKind, "tournaments" | "winners">[] = ["players", "leagues", "groups", "trending"]; // tournaments are scheduled separately, more often
     for (let i = k.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [k[i], k[j]] = [k[j], k[i]];
     }
-    return ["winners", ...k]; // winners always come first so people see them early
+    session.inserts = ["winners", ...k]; // winners always come first so people see them early
+    return session.inserts;
   }, []);
 
   let orderedFirst: Post[] = data?.pages[0]?.posts ?? [];
   if (orderedFirst.length > 0) {
-    if (!seenBefore.current) seenBefore.current = loadSeen();
-    const seen = seenBefore.current;
+    if (!session.seen) session.seen = loadSeen();
+    const seen = session.seen;
     const now = Date.now();
     const keyOf = (p: Post) => {
-      let k = shuffleKeys.current.get(p.id);
+      let k = session.keys.get(p.id);
       if (k === undefined) {
         const mineAndNew = !!profile && p.authorId === profile.uid && now - ((p.createdAt as { toMillis?: () => number } | null)?.toMillis?.() ?? 0) < 10 * 60_000;
         k = mineAndNew ? -1 : (seen.has(p.id) ? 1 : 0) + Math.random();
-        shuffleKeys.current.set(p.id, k);
+        session.keys.set(p.id, k);
       }
       return k;
     };
@@ -59,8 +78,8 @@ export function FeedList({ afterFirst }: { afterFirst?: ReactNode }) {
   // remember what this visit showed, so the next refresh starts with different posts
   const firstIds = orderedFirst.slice(0, 10).map((p) => p.id).join(",");
   useEffect(() => {
-    if (!firstIds || markedSeen.current) return;
-    markedSeen.current = true;
+    if (!firstIds || session.marked) return;
+    session.marked = true;
     try {
       const all = [...firstIds.split(","), ...Array.from(loadSeen())];
       localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(new Set(all)).slice(0, SEEN_MAX)));
