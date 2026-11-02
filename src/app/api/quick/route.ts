@@ -15,11 +15,13 @@ export const maxDuration = 30;
  *   join  -> enter the waiting room (or resume a match that is already running)
  *   poll  -> called every few seconds while waiting; keeps your place and looks for an opponent
  *   leave -> leave the waiting room
+ *   check -> right after a match: both players check in; if both are not there within 30s the match is cancelled and they search again
  */
 
 const GAMES = ["eFootball", "EA FC", "Mortal Kombat", "Blood Strike"];
 const MAX_WAIT_MS = 5 * 60_000; // give up after 5 minutes
 const ALIVE_MS = 25_000; // a waiting player must have polled in the last 25s, so we never pair with someone who left
+const CONFIRM_MS = 30_000; // both players must check in within 30s of being matched, or the match is cancelled
 const RESUME_MS = 45 * 60_000; // a running quick match is resumed for 45 minutes
 
 const ms = (v: unknown) => (v as { toMillis?: () => number } | null | undefined)?.toMillis?.() ?? 0;
@@ -70,6 +72,8 @@ async function tryPair(db: Firestore, uid: string, game: string): Promise<string
         note: "Quick match",
         status: "accepted",
         quick: true,
+        needsConfirm: true,
+        ready: {},
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -106,7 +110,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ ok: false, error: "Please sign in again." }, { status: 401 });
   }
-  let body: { action?: string; game?: string };
+  let body: { action?: string; game?: string; challengeId?: string };
   try {
     body = await req.json();
   } catch {
@@ -151,6 +155,33 @@ export async function POST(req: Request) {
       if (matchId) return NextResponse.json({ ok: true, state: "matched", challengeId: matchId });
       await myRef.update({ lastPing: FieldValue.serverTimestamp() }).catch(() => undefined);
       return NextResponse.json({ ok: true, state: "waiting" });
+    }
+
+    if (body.action === "check") {
+      // Both players have to check in within 30 seconds of being matched, or the match is cancelled and both search again.
+      const chId = String(body.challengeId ?? "");
+      if (!chId) return NextResponse.json({ ok: false, error: "Missing match." }, { status: 400 });
+      const chRef = db.doc(`challenges/${chId}`);
+      const c = (await chRef.get()).data();
+      if (!c || c.quick !== true || !(c.participantIds ?? []).includes(uid)) return NextResponse.json({ ok: true, state: "idle" });
+      if (c.status === "cancelled") return NextResponse.json({ ok: true, state: "dropped" });
+      // older matches (made before check-in existed), already confirmed ones, or ones already being played
+      if (c.status !== "accepted" || c.needsConfirm !== true || c.confirmed === true) {
+        return NextResponse.json({ ok: true, state: "matched", challengeId: chId, confirmed: true });
+      }
+      const other = (c.participantIds as string[]).find((id) => id !== uid);
+      const ready: Record<string, unknown> = { ...(c.ready ?? {}), [uid]: true };
+      const both = !!other && ready[other] === true;
+      if (both) {
+        await chRef.update({ [`ready.${uid}`]: true, confirmed: true, updatedAt: FieldValue.serverTimestamp() });
+        return NextResponse.json({ ok: true, state: "matched", challengeId: chId, confirmed: true });
+      }
+      if (Date.now() - ms(c.createdAt) > CONFIRM_MS) {
+        await chRef.update({ status: "cancelled", updatedAt: FieldValue.serverTimestamp() });
+        return NextResponse.json({ ok: true, state: "dropped" });
+      }
+      await chRef.update({ [`ready.${uid}`]: true });
+      return NextResponse.json({ ok: true, state: "matched", challengeId: chId, confirmed: false });
     }
 
     return NextResponse.json({ ok: false, error: "Unknown action." }, { status: 400 });

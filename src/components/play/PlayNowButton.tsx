@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { Loader2, Swords, X } from "lucide-react";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
@@ -29,6 +29,9 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmedId, setConfirmedId] = useState<string | null>(null);
+  const [confirmLeft, setConfirmLeft] = useState(30);
   const alive = useRef(false);
   const { items } = useChallenges(profile?.uid);
 
@@ -77,15 +80,15 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
 
   if (!profile) return null;
 
-  async function start() {
+  async function start(g: string = game) {
     setError(null);
     setSeconds(0);
     try {
-      localStorage.setItem(GAME_KEY, game);
+      localStorage.setItem(GAME_KEY, g);
     } catch {
       /* fine */
     }
-    const r = await callQuick({ action: "join", game });
+    const r = await callQuick({ action: "join", game: g });
     if (!r.ok) {
       setError(r.error ?? "Couldn't start. Try again.");
       return;
@@ -100,6 +103,11 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
 
   async function cancel() {
     alive.current = false;
+    // leaving during the 30-second check-in cancels the match, so the other player goes back to searching
+    if (stage === "matched" && challengeId && confirmedId !== challengeId) {
+      await updateDoc(doc(db, "challenges", challengeId), { status: "cancelled" }).catch(() => undefined);
+      setChallengeId(null);
+    }
     await callQuick({ action: "leave" });
     setStage("pick");
   }
@@ -107,10 +115,51 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
   function onOpenChange(next: boolean) {
     if (!next && stage === "searching") void callQuick({ action: "leave" });
     if (!next && stage !== "matched") setStage("pick");
+    if (!next) setNotice(null);
     setOpen(next);
   }
 
   const challenge = challengeId ? items.find((c) => c.id === challengeId) : undefined;
+  const matchedGame = challenge?.game;
+
+  // Right after a match both players must check in within 30 seconds. If both are not here, the match is
+  // cancelled and everyone goes back to searching.
+  useEffect(() => {
+    if (!open || stage !== "matched" || !challengeId) return;
+    if (confirmedId === challengeId) return;
+    let stop = false;
+    let tries = 0;
+    setConfirmLeft(30);
+    const clock = setInterval(() => setConfirmLeft((s) => Math.max(0, s - 1)), 1000);
+    const run = async () => {
+      tries++;
+      const r = await callQuick({ action: "check", challengeId });
+      if (stop) return;
+      if (r.ok && r.state === "dropped") {
+        stop = true;
+        setChallengeId(null);
+        setNotice("Your opponent didn't make it in time. Searching again…");
+        const g = matchedGame && (QUICK_GAMES as readonly string[]).includes(matchedGame) ? matchedGame : game;
+        setGame(g);
+        void start(g);
+      } else if (r.ok && r.confirmed) {
+        stop = true;
+        setConfirmedId(challengeId);
+      } else if (tries >= 14) {
+        stop = true;
+      }
+    };
+    void run();
+    const timer = setInterval(() => {
+      if (stop) clearInterval(timer);
+      else void run();
+    }, 3000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+      clearInterval(clock);
+    };
+  }, [open, stage, challengeId, confirmedId]); // eslint-disable-line react-hooks/exhaustive-deps
   const mm = Math.floor(seconds / 60);
   const ss = String(seconds % 60).padStart(2, "0");
 
@@ -195,7 +244,7 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
               </div>
               <p className="text-xs text-steel/50">Quick matches are for fun and bragging rights. No PlayCoins are paid.</p>
               {error && <p className="text-sm text-signal-red">{error}</p>}
-              <Button size="lg" onClick={start}>Find an opponent</Button>
+              <Button size="lg" onClick={() => start()}>Find an opponent</Button>
             </div>
           )}
 
@@ -208,6 +257,7 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
                 </span>
               </div>
               <div>
+                {notice && <p className="mb-1 text-sm font-semibold text-amber-500">{notice}</p>}
                 <p className="font-display text-lg font-bold">Looking for a {game} opponent…</p>
                 <p className="text-sm text-steel/60">Waiting {mm}:{ss} · stay on this screen</p>
               </div>
@@ -223,7 +273,21 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
             </div>
           )}
 
-          {stage === "matched" && (
+          {stage === "matched" && challengeId && confirmedId !== challengeId && (
+            <div className="mt-4 flex flex-col items-center gap-4 py-4 text-center">
+              <div className="relative flex h-24 w-24 items-center justify-center">
+                <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" />
+                <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-brand-gradient font-display text-2xl font-extrabold text-white">{confirmLeft}</span>
+              </div>
+              <div>
+                <p className="font-display text-lg font-bold">Opponent found. Waiting for them…</p>
+                <p className="text-sm text-steel/60">Both players must be here within 30 seconds. If not, you both go back to searching.</p>
+              </div>
+              <Button variant="outline" onClick={cancel}><X className="h-4 w-4" /> Cancel</Button>
+            </div>
+          )}
+
+          {stage === "matched" && (!challengeId || confirmedId === challengeId) && (
             <MatchedView
               uid={profile.uid}
               challenge={challenge}

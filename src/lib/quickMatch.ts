@@ -2,16 +2,17 @@ import { auth } from "@/lib/firebase/client";
 
 export const QUICK_GAMES = ["eFootball", "EA FC", "Mortal Kombat", "Blood Strike"] as const;
 
-export type QuickState = "idle" | "waiting" | "matched" | "expired";
+export type QuickState = "idle" | "waiting" | "matched" | "expired" | "dropped";
 export interface QuickReply {
   ok: boolean;
   state?: QuickState;
   challengeId?: string;
+  confirmed?: boolean;
   error?: string;
 }
 
 /** Talks to the waiting-room server: join, poll (every few seconds while waiting) and leave. */
-export async function callQuick(body: { action: "join"; game: string } | { action: "poll" | "leave" }): Promise<QuickReply> {
+export async function callQuick(body: { action: "join"; game: string } | { action: "check"; challengeId: string } | { action: "poll" | "leave" }): Promise<QuickReply> {
   const user = auth.currentUser;
   if (!user) return { ok: false, error: "Please sign in again." };
   const ctrl = new AbortController();
