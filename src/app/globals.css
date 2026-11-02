@@ -190,3 +190,24 @@ html, body { overflow-x: hidden; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   .pc-1v1-ring, .pc-1v1-icon { animation: none; }
 }
+
+/* 1v1 waiting screen scenes */
+@keyframes pcBall { 0% { transform: translate(0, 0) rotate(0); } 25% { transform: translate(90px, -46px) rotate(180deg); } 50% { transform: translate(180px, 0) rotate(360deg); } 75% { transform: translate(250px, -38px) rotate(540deg); } 100% { transform: translate(330px, 0) rotate(720deg); } }
+.pc-ball { animation: pcBall 3.2s linear infinite alternate; }
+@keyframes pcFlicker { 0%, 100% { opacity: .22; transform: scale(1); } 40% { opacity: .42; transform: scale(1.08); } 70% { opacity: .28; transform: scale(.96); } }
+.pc-flicker { animation: pcFlicker 1.4s ease-in-out infinite; }
+@keyframes pcBolt { 0%, 90%, 100% { opacity: .05; } 93% { opacity: .55; } 96% { opacity: .15; } }
+.pc-bolt { animation: pcBolt 3s linear infinite; }
+@keyframes pcSweep { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.pc-sweep { background: conic-gradient(from 0deg, rgba(52, 211, 153, 0.55), rgba(52, 211, 153, 0) 28%); animation: pcSweep 2.4s linear infinite; }
+@keyframes pcBlip { 0%, 100% { opacity: 0; transform: scale(.4); } 50% { opacity: 1; transform: scale(1.4); } }
+.pc-blip { animation: pcBlip 2.4s ease-in-out infinite; box-shadow: 0 0 10px 2px rgba(110, 231, 183, .9); }
+@keyframes pcVs { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+.pc-vs { animation: pcVs 1.1s ease-in-out infinite; }
+@keyframes pcMystery { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.pc-mystery { animation: pcMystery 1.2s ease-in-out infinite; }
+@keyframes pcFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.pc-fade { animation: pcFade .4s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .pc-ball, .pc-flicker, .pc-bolt, .pc-sweep, .pc-blip, .pc-vs, .pc-mystery { animation: none; }
+}

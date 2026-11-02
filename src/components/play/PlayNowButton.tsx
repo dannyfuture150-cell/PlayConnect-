@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { Loader2, Swords, X } from "lucide-react";
+import { Swords, X } from "lucide-react";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import { useChallenges } from "@/hooks/useChallenges";
@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Row as ChallengeRow } from "@/components/challenges/ChallengeList";
 import { OpenGameButton } from "@/components/tournaments/OpenGameButton";
 import { callQuick, QUICK_GAMES } from "@/lib/quickMatch";
+import { QuickScene } from "@/components/play/QuickScene";
 import { connectedGames, gameForTournament } from "@/lib/gameAccounts";
 import type { Challenge, UserProfile } from "@/types";
 
@@ -28,7 +29,6 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
   const [game, setGame] = useState<string>(QUICK_GAMES[0]);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [seconds, setSeconds] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
   const [confirmLeft, setConfirmLeft] = useState(30);
@@ -70,11 +70,9 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
       timer = setTimeout(tick, POLL_MS);
     };
     timer = setTimeout(tick, POLL_MS);
-    const clock = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => {
       alive.current = false;
       clearTimeout(timer);
-      clearInterval(clock);
     };
   }, [stage]);
 
@@ -82,7 +80,6 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
 
   async function start(g: string = game) {
     setError(null);
-    setSeconds(0);
     try {
       localStorage.setItem(GAME_KEY, g);
     } catch {
@@ -160,8 +157,6 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
       clearInterval(clock);
     };
   }, [open, stage, challengeId, confirmedId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const mm = Math.floor(seconds / 60);
-  const ss = String(seconds % 60).padStart(2, "0");
 
   return (
     <>
@@ -249,18 +244,10 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
           )}
 
           {stage === "searching" && (
-            <div className="mt-4 flex flex-col items-center gap-4 py-4 text-center">
-              <div className="relative flex h-24 w-24 items-center justify-center">
-                <span className="absolute inset-0 animate-ping rounded-full bg-violet/30" />
-                <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-brand-gradient text-white">
-                  <Loader2 className="h-9 w-9 animate-spin" />
-                </span>
-              </div>
-              <div>
-                {notice && <p className="mb-1 text-sm font-semibold text-amber-500">{notice}</p>}
-                <p className="font-display text-lg font-bold">Looking for a {game} opponent…</p>
-                <p className="text-sm text-steel/60">Waiting {mm}:{ss} · stay on this screen</p>
-              </div>
+            <div className="mt-3 flex flex-col gap-3">
+              {notice && <p className="rounded-xl bg-amber-500/15 px-3 py-2 text-center text-sm font-semibold text-amber-500">{notice}</p>}
+              <QuickScene game={game} me={{ displayName: profile.displayName, photoURL: profile.photoURL }} />
+              <p className="text-center text-xs text-steel/60">Stay on this screen. You&apos;ll be matched as soon as another {game} player taps Play.</p>
               <Button variant="outline" onClick={cancel}><X className="h-4 w-4" /> Cancel</Button>
             </div>
           )}
@@ -274,15 +261,13 @@ export function PlayNowButton({ variant = "card" }: { variant?: "card" | "icon" 
           )}
 
           {stage === "matched" && challengeId && confirmedId !== challengeId && (
-            <div className="mt-4 flex flex-col items-center gap-4 py-4 text-center">
-              <div className="relative flex h-24 w-24 items-center justify-center">
-                <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" />
-                <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-brand-gradient font-display text-2xl font-extrabold text-white">{confirmLeft}</span>
-              </div>
-              <div>
-                <p className="font-display text-lg font-bold">Opponent found. Waiting for them…</p>
-                <p className="text-sm text-steel/60">Both players must be here within 30 seconds. If not, you both go back to searching.</p>
-              </div>
+            <div className="mt-3 flex flex-col gap-3">
+              <QuickScene
+                game={matchedGame ?? game}
+                me={{ displayName: profile.displayName, photoURL: profile.photoURL }}
+                opponent={challenge ? (challenge.challengerId === profile.uid ? challenge.opponent : challenge.challenger) : null}
+                secondsLeft={confirmLeft}
+              />
               <Button variant="outline" onClick={cancel}><X className="h-4 w-4" /> Cancel</Button>
             </div>
           )}
