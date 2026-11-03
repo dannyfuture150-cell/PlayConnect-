@@ -185,3 +185,24 @@ export async function r2CheckCredentials(): Promise<string | null> {
     return `Storage setup problem: can't reach R2 (${(e as Error).message?.slice(0, 60) ?? "unknown"})`;
   }
 }
+
+/** One page (up to 1000) of the bucket's file names. `next` is set while there are more. */
+export async function r2ListPage(token?: string): Promise<{ keys: string[]; next: string | null }> {
+  const t = { ...target("x"), path: `/${process.env.R2_BUCKET}` };
+  const query: Record<string, string> = { "list-type": "2", "max-keys": "1000" };
+  if (token) query["continuation-token"] = token;
+  const headers = signHeaders(t, "GET", query, "");
+  const { host: _h, ...sendHeaders } = headers;
+  void _h;
+  const res = await fetch(`https://${t.host}${encodePath(t.path)}?${canonicalQuery(query)}`, { method: "GET", headers: sendHeaders });
+  const xml = await res.text();
+  if (!res.ok) throw new Error(`R2 list failed (${res.status}): ${xml.slice(0, 160)}`);
+  const keys: string[] = [];
+  const re = /<Key>([^<]*)<\/Key>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml))) {
+    keys.push(m[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'"));
+  }
+  const next = /<IsTruncated>true<\/IsTruncated>/.test(xml) ? xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1] ?? null : null;
+  return { keys, next };
+}

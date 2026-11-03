@@ -198,7 +198,12 @@ export function useUnreadThreadCount(uid: string | undefined) {
 }
 
 /** Sends a plain text message (e.g. a shared post link) into an existing thread. */
-export async function sendTextToThread(threadId: string, senderId: string, text: string) {
+export async function sendTextToThread(
+  threadId: string,
+  senderId: string,
+  text: string,
+  replyTo: { id: string; name: string; text: string } | null = null
+) {
   const otherUid = threadId.split("_").find((id) => id && id !== senderId);
   const sent = await addDoc(collection(db, "threads", threadId, "messages"), {
     threadId,
@@ -207,7 +212,7 @@ export async function sendTextToThread(threadId: string, senderId: string, text:
     mediaUrl: null,
     mediaType: null,
     mediaDuration: null,
-    replyTo: null,
+    replyTo,
     read: false,
     createdAt: serverTimestamp(),
   });

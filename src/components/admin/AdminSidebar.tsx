@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/admin/competitions", label: "Competitions", icon: Trophy, exact: false },
   { href: "/admin/reports", label: "Reports", icon: Flag, exact: false },
   { href: "/admin/ads", label: "Ads", icon: Megaphone, exact: false },
+  { href: "/admin/media", label: "Move media", icon: FileText, exact: false },
 ];
 
 /** Left sidebar on desktop; a compact scrolling tab bar across the top on phones. */

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { format, isToday, isYesterday } from "date-fns";
-import { Flag, Heart, Plus, Trash2, X } from "lucide-react";
+import { Flag, Heart, Plus, Send, Trash2, X } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   useActiveStories,
@@ -19,6 +19,7 @@ import { isVideoFile, validateImageFile, validateVideoFile } from "@/lib/firebas
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, formatCount } from "@/lib/utils";
 import { reportStory } from "@/hooks/useAdmin";
+import { getOrCreateThread, sendTextToThread } from "@/hooks/useMessages";
 
 const STORY_REPORT_REASONS = ["Inappropriate content", "Harassment or hate", "Spam or scam", "Violence or something harmful", "Pretending to be someone else"];
 
@@ -90,6 +91,9 @@ export function StoriesRow() {
   const [showHeartBurst, setShowHeartBurst] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const lastTapRef = useRef(0);
+  const [replyText, setReplyText] = useState("");
+  const [replyFocus, setReplyFocus] = useState(false);
+  const [replyState, setReplyState] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
   // Opened from someone's profile picture (?story=<uid>): jump straight into their story.
   useEffect(() => {
@@ -206,6 +210,33 @@ export function StoriesRow() {
     }
   }
 
+  // A half-written reply belongs to one story only.
+  useEffect(() => {
+    setReplyText("");
+    setReplyState("idle");
+    setReplyFocus(false);
+  }, [activeStory?.id]);
+
+  async function sendReply() {
+    const text = replyText.trim();
+    if (!profile || !viewing || !activeStory || !text || replyState === "sending") return;
+    setReplyState("sending");
+    try {
+      const me = { uid: profile.uid, username: profile.username, displayName: profile.displayName, photoURL: profile.photoURL ?? null };
+      const threadId = await getOrCreateThread(me, viewing.author);
+      const about =
+        activeStory.mediaType === "text" ? (activeStory.text ?? "Story").slice(0, 80) : activeStory.mediaType === "video" ? "🎬 Video story" : "📷 Photo story";
+      await sendTextToThread(threadId, profile.uid, text.slice(0, 1000), { id: activeStory.id, name: `${viewing.author.displayName}'s story`, text: about });
+      setReplyText("");
+      setReplyState("sent");
+      (document.activeElement as HTMLElement | null)?.blur();
+      setReplyFocus(false);
+      setTimeout(() => setReplyState((s) => (s === "sent" ? "idle" : s)), 2000);
+    } catch {
+      setReplyState("error");
+    }
+  }
+
   // Mark the story as seen as soon as it appears.
   useEffect(() => {
     if (activeStory && profile) markViewed.mutate({ storyId: activeStory.id, uid: profile.uid });
@@ -214,7 +245,7 @@ export function StoriesRow() {
 
   // Auto-advance timer for photo / text stories (videos drive progress themselves).
   useEffect(() => {
-    if (!activeStory || activeStory.mediaType === "video" || paused || confirmingDelete || reportStep !== "closed") return;
+    if (!activeStory || activeStory.mediaType === "video" || paused || replyFocus || confirmingDelete || reportStep !== "closed") return;
     const DURATION = 5000;
     const started = Date.now() - progress * DURATION;
     const id = setInterval(() => {
@@ -228,15 +259,15 @@ export function StoriesRow() {
     }, 50);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStory?.id, paused, confirmingDelete, reportStep]);
+  }, [activeStory?.id, paused, replyFocus, confirmingDelete, reportStep]);
 
   // Hold to pause videos too.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (paused || confirmingDelete || reportStep !== "closed") v.pause();
+    if (paused || replyFocus || confirmingDelete || reportStep !== "closed") v.pause();
     else v.play().catch(() => {});
-  }, [paused, confirmingDelete, reportStep, activeStory?.id]);
+  }, [paused, replyFocus, confirmingDelete, reportStep, activeStory?.id]);
 
   function handlePointerDown(e: React.PointerEvent) {
     pointerRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
@@ -512,23 +543,51 @@ export function StoriesRow() {
               </div>
             )}
 
-            <div className="pointer-events-none absolute bottom-0 left-0 z-20 flex w-full items-center justify-between bg-gradient-to-t from-slate-950/70 to-transparent p-3">
-              <p className="text-[11px] text-white/50">
-                {isOwnStory ? "Only you can see likes" : "Tap sides · swipe · double-tap to like"}
-              </p>
+            <div className="pointer-events-none absolute bottom-0 left-0 z-20 flex w-full items-center gap-2 bg-gradient-to-t from-slate-950/70 to-transparent p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
               {isOwnStory ? (
-                <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-slate-950/50 px-3 py-1.5 text-white">
-                  <Heart className="h-4 w-4 fill-signal-red text-signal-red" />
-                  <span className="text-xs font-medium">{formatCount(activeStory.likes?.length ?? 0)}</span>
-                </div>
+                <>
+                  <p className="flex-1 text-[11px] text-white/50">Only you can see likes</p>
+                  <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-slate-950/50 px-3 py-1.5 text-white">
+                    <Heart className="h-4 w-4 fill-signal-red text-signal-red" />
+                    <span className="text-xs font-medium">{formatCount(activeStory.likes?.length ?? 0)}</span>
+                  </div>
+                </>
               ) : (
-                <button
-                  onClick={handleLikeToggle}
-                  aria-label={hasLiked ? "Unlike story" : "Like story"}
-                  className="pointer-events-auto flex items-center rounded-full bg-slate-950/50 p-2 text-white"
-                >
-                  <Heart className={cn("h-5 w-5", hasLiked && "fill-signal-red text-signal-red")} />
-                </button>
+                <>
+                  <form
+                    className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1 rounded-full border border-white/40 bg-slate-950/40 pl-4 pr-1 backdrop-blur"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void sendReply();
+                    }}
+                  >
+                    <input
+                      value={replyText}
+                      onChange={(e) => {
+                        setReplyText(e.target.value);
+                        if (replyState !== "sending") setReplyState("idle");
+                      }}
+                      onFocus={() => setReplyFocus(true)}
+                      onBlur={() => setReplyFocus(false)}
+                      maxLength={1000}
+                      placeholder={replyState === "sent" ? "Sent ✓ Check your chat" : replyState === "error" ? "Couldn't send. Try again" : `Reply to ${viewing.author.displayName.split(" ")[0]}…`}
+                      className="min-w-0 flex-1 bg-transparent py-2.5 text-[16px] text-white outline-none placeholder:text-white/70"
+                      aria-label="Reply to story"
+                    />
+                    {replyText.trim() && (
+                      <button type="submit" disabled={replyState === "sending"} aria-label="Send reply" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white disabled:opacity-60">
+                        <Send className="h-4 w-4" />
+                      </button>
+                    )}
+                  </form>
+                  <button
+                    onClick={handleLikeToggle}
+                    aria-label={hasLiked ? "Unlike story" : "Like story"}
+                    className="pointer-events-auto flex shrink-0 items-center rounded-full bg-slate-950/50 p-2.5 text-white"
+                  >
+                    <Heart className={cn("h-5 w-5", hasLiked && "fill-signal-red text-signal-red")} />
+                  </button>
+                </>
               )}
             </div>
           </div>
